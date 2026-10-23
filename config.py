@@ -75,6 +75,10 @@ VIEWER_MAX_FACES = 200_000   # Dreiecksbudget nur der Vorschau im Browser (Festl
 # kleine eingeschlossene Hohlräume entfallen vor dem Vernetzen (core/parts/cleanup.without_sliver); nach dem
 # Vernetzen ebenso kleine geschlossene Schalen (core/voxels/meshing.without_specks). 0.5 mm³ ≈ 8 Voxel bei 0.4 mm.
 SPECK_MIN_VOLUME_MM3 = 0.5
+# Geschlossene Hohlräume eines Teils (Schacht, Zwischenraum unter einem Bodenaufbau) bis zu diesem Anteil seines
+# Volumens werden gefüllt: unsichtbar, ohne Stützen im Innern druckbar und im Slicer keine Scheinobjekte.
+# Grössere (z.B. ein geschlossener Dachraum) blieben sonst als viel Mehrmaterial – sie bleiben hohl, mit Warnung.
+CAVITY_FILL_RATIO = 0.05
 
 # Druckbett (core/parts/print_layout.py), Modell-mm. Festlegung.
 PRINT_GAP_MM = 8.0              # Abstand der Teile auf einem Druckbett

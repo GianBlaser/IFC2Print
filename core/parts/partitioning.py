@@ -22,7 +22,8 @@ import numpy as np
 import trimesh
 from scipy.ndimage import find_objects
 
-from config import ROOF_MIN_RATIO, JOINT_OVERHANG_MM, SPECK_MIN_VOLUME_MM3, JOINT_LEVELING_MM, JOINT_WIDTH_MM, JOINT_SLAB_MM
+from config import (CAVITY_FILL_RATIO, ROOF_MIN_RATIO, JOINT_OVERHANG_MM, SPECK_MIN_VOLUME_MM3, JOINT_LEVELING_MM,
+                    JOINT_WIDTH_MM, JOINT_SLAB_MM)
 from core.parts.cleanup import assign_with_message, without_sliver
 from core.parts.storey_joints import cuts, joint_columns, smooth_joint, storey_and_above
 from core.voxels.grid import VoxelGrid
@@ -75,6 +76,8 @@ def mesh_pieces(voxel_grid: VoxelGrid, partition: Partition,
                 progress: Callable[[str, int, int], None] | None = None) -> dict[str, trimesh.Trimesh]:
     """Ein wasserdichtes Mesh je Teil, von unten nach oben sortiert; leere Teile entfallen.
 
+    Geschlossene Hohlräume bis CAVITY_FILL_RATIO des Teilvolumens werden gefüllt (core/parts/cleanup.without_sliver),
+    grössere bleiben; beides meldet ``partition.warnings``.
     Teilnamen sind eindeutig (core.ifc.assignment.room_names); kämen trotzdem zwei gleich vor,
     erhält das zweite eine Nummer, statt das erste still zu überschreiben.
     """
@@ -82,11 +85,20 @@ def mesh_pieces(voxel_grid: VoxelGrid, partition: Partition,
     boxes = find_objects(partition.labels + 1)       # Box je Label in EINEM Durchgang: Index w ↔ Label w (−1 = leer)
     values = [w for w in range(len(partition.names)) if w < len(boxes) and boxes[w] is not None]
     min_voxel = int(np.ceil(SPECK_MIN_VOLUME_MM3 / voxel_grid.pitch ** 3))
+    mm3 = voxel_grid.pitch ** 3
     for number, value in enumerate(values, start=1):
         span_slices = boxes[value]
-        mask = without_sliver(partition.labels[span_slices] == value, min_voxel)
+        mask = partition.labels[span_slices] == value
+        mask, filled, kept = without_sliver(mask, min_voxel, int(CAVITY_FILL_RATIO * mask.sum()))
         if not mask.any():                                        # Teil bestand nur aus Krumen
             continue
+        name = partition.names[value]
+        if filled:
+            partition.warnings.append(f"«{name}»: geschlossene Hohlräume gefüllt ({len(filled)}, {sum(filled) * mm3:.0f} mm³) "
+                                      "– unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.")
+        if kept:
+            partition.warnings.append(f"«{name}»: grosse geschlossene Hohlräume bleiben ({len(kept)}, {sum(kept) * mm3:.0f} mm³) "
+                                      "– im Slicer das Teil nicht in Objekte trennen.")
         lo = np.array([s.start for s in span_slices])
         mesh = postprocessed(marching_cubes(mask, voxel_grid.origin + lo * voxel_grid.pitch, voxel_grid.pitch), specks=False)
         result.append((lo[2], partition.names[value], mesh, value))

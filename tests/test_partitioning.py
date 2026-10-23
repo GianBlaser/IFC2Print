@@ -193,10 +193,25 @@ def test_without_slivers_removes_specks_and_fills_small_cavities():
     m[4, 4, 4] = False                       # Hohlraum aus 1 Voxel
     m[8, 8, 8] = True                        # Krume, nur über eine Ecke verbunden
     m[10:12, 0:2, 0:3] = True                # loses Stück mit 12 Voxeln bleibt
-    r = without_sliver(m, 8)
+    r, filled, kept = without_sliver(m, 8)
     assert not r[8, 8, 8] and r[4, 4, 4] and r[10:12, 0:2, 0:3].all()
     assert r.sum() == 6 ** 3 + 12
-    assert without_sliver(m, 1) is m             # grobe Voxel: nichts zu tun
+    assert filled == kept == []                  # der 1-Voxel-Hohlraum ist ein Vernetzungsrest, keine Meldung
+    assert without_sliver(m, 1)[0] is m          # grobe Voxel: nichts zu tun
+
+
+def test_closed_cavities_up_to_the_limit_are_filled():
+    m = np.zeros((20, 20, 20), dtype=bool)
+    m[1:19, 1:19, 1:19] = True
+    m[3:6, 3:6, 3:6] = False                     # Schacht 27 Voxel
+    m[8:16, 8:16, 8:16] = False                  # grosser Hohlraum 512 Voxel
+    r, filled, kept = without_sliver(m, 8, max_cavity=100)
+    assert r[3:6, 3:6, 3:6].all() and not r[8:16, 8:16, 8:16].any()
+    assert filled == [27] and kept == [512]
+    open_box = m.copy()
+    open_box[3:6, 3:6, 0:3] = False              # nach unten offen: kein geschlossener Hohlraum
+    r, filled, _ = without_sliver(open_box, 8, max_cavity=100)
+    assert filled == [] and not r[3:6, 3:6, 3:6].any()
 
 
 def test_mesh_pieces_without_specks_and_unique():
@@ -244,3 +259,4 @@ def test_slab_underside_below_wall_of_upper_storey_is_trimmed():
     smooth_joint(m, 10, np.ones((20, 6), dtype=bool), leveling=2, plate=5, width=0)
     assert not m[8:10, :, 9].any()                      # unter der oberen Wand: kein Streifen mehr
     assert m[0, :, 8].all()                             # untere Wand bleibt
+

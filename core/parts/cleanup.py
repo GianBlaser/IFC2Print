@@ -7,7 +7,7 @@ ordnet sie dem Nachbarteil zu oder entfernt sie – und meldet jede Änderung al
     winzige lose Splitter ohne Kontakt entfallen.
   * ``assign_small_pieces``: ganze Teile unter einem Mindestanteil gehen ans Nachbarteil.
   * ``assign_hanging``: Stücke, die unter die Unterseite ihres Teils ragen.
-  * ``without_sliver``: lose Stücke und winzige Hohlräume einer Teil-Maske entfernen.
+  * ``without_sliver``: lose Stücke einer Teil-Maske entfernen und geschlossene Hohlräume füllen.
 
 Eingabe: Label-Gitter (Teilnummer je Voxel, −1 = leer)
 Ausgabe: Label-Gitter wird verändert; Rückgabe ist die Anzahl umgehängter oder entfernter Stücke bzw. Warnungen
@@ -147,25 +147,35 @@ def assign_with_message(labels: np.ndarray, names: list[str], storey_count: int,
     return warnings
 
 
-def without_sliver(mask: np.ndarray, min_voxel: int) -> np.ndarray:
-    """Entfernt lose Stücke unter ``min_voxel`` (Flächenkontakt) und füllt ebenso kleine eingeschlossene Hohlräume.
+def without_sliver(mask: np.ndarray, min_voxel: int, max_cavity: int = 0) -> tuple[np.ndarray, list[int], list[int]]:
+    """Entfernt lose Stücke unter ``min_voxel`` (Flächenkontakt) und füllt geschlossene Hohlräume.
 
-    Solche Stücke hängen nur über Kanten oder Ecken am Teil; Marching Cubes macht daraus winzige
+    Lose Stücke hängen nur über Kanten oder Ecken am Teil; Marching Cubes macht daraus winzige
     eigene Schalen. Sie hier im Gitter zu entfernen kostet Millisekunden – im fertigen Netz
     (``mesh.split``) war es der grösste Einzelposten der Erzeugung (NEST: 40 von 113 s).
+
+    Gefüllt werden Hohlräume unter ``min_voxel`` (Vernetzungsreste) und solche bis ``max_cavity`` Voxel: Ein
+    geschlossener Hohlraum (Schacht, Zwischenraum unter einem Bodenaufbau) ist nach dem Druck unsichtbar, bräuchte
+    innen Stützen und wird im Slicer beim Trennen in Objekte zu einem Scheinkörper.
+    Rückgabe: (Maske, Voxelzahl je gefülltem Hohlraum, Voxelzahl je verbleibendem), je nur ab ``min_voxel``.
     """
-    if min_voxel <= 1:
-        return mask
-    fragments, n = label(mask)
-    if n > 1:
-        small = np.bincount(fragments.ravel()) < min_voxel
-        small[0] = False
-        if small.any():
-            mask = mask & ~small[fragments]
-    hollow, n = label(np.pad(~mask, 1))
-    if n > 1:
-        small = np.bincount(hollow.ravel()) < min_voxel
-        small[[0, hollow[0, 0, 0]]] = False                           # Hintergrund und Aussenraum bleiben
-        if small.any():
-            mask = mask | small[hollow][1:-1, 1:-1, 1:-1]
-    return mask
+    if min_voxel <= 1 and not max_cavity:
+        return mask, [], []
+    if min_voxel > 1:
+        fragments, n = label(mask)
+        if n > 1:
+            small = np.bincount(fragments.ravel()) < min_voxel
+            small[0] = False
+            if small.any():
+                mask = mask & ~small[fragments]
+    hollow, n = label(np.pad(~mask, 1, constant_values=True))      # Luft rundum: der Aussenraum hängt zusammen
+    if n < 2:
+        return mask, [], []
+    sizes = np.bincount(hollow.ravel())
+    inside = np.ones(len(sizes), dtype=bool)
+    inside[[0, hollow[0, 0, 0]]] = False                          # Hintergrund und Aussenraum bleiben
+    fill = inside & (sizes < max(min_voxel, max_cavity + 1))
+    if fill.any():
+        mask = mask | fill[hollow][1:-1, 1:-1, 1:-1]
+    visible = sizes >= min_voxel
+    return mask, sizes[fill & visible].tolist(), sizes[inside & ~fill & visible].tolist()
