@@ -1,0 +1,19 @@
+# Direkte Abhängigkeiten (getestet mit Python 3.13, Oktober 2026).
+# Installation:  pip install -r requirements.txt
+
+ifcopenshell>=0.8         # IFC lesen, triangulieren
+numpy>=2.0
+pandas>=2.2               # Bauteiltabelle
+scipy>=1.13               # Morphologie (Hohlräume füllen, verdicken), orientierte Bounding-Box
+scikit-image>=0.24        # Marching Cubes
+trimesh>=4.4              # Meshes, STL/GLB-Export
+manifold3d>=3.0         # Boolean für Steckverbinder
+fast-simplification>=0.1.7  # Quadric-Dezimierung (von trimesh genutzt)
+matplotlib>=3.9           # PDF-Report
+psutil>=5.9               # Arbeitsspeicher abfragen (Speicherbremse, auch unter Windows)
+nicegui>=3.0              # Oberfläche inkl. 3D-Viewer (ui.scene)
+fastapi>=0.110             # Route für die GLB-Dateien (kommt auch mit nicegui)
+
+# Tests
+pytest>=8
+pytest-asyncio>=0.24
