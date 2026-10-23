@@ -79,14 +79,14 @@ def element_boxes(ifc: IfcModel, scale: int, angle: float = 0.0) -> dict[str, tu
     return boxes
 
 
-def element_at_point(boxes: dict, df: pd.DataFrame, storey: str, point: Sequence[float], tolerance_mm: float = 0.3,
+def element_at_point(boxes: dict, df: pd.DataFrame, storey: str | None, point: Sequence[float], tolerance_mm: float = 0.3,
                      printed_only: bool = True) -> str | None:
-    """GUID des Bauteils im Geschoss, auf dessen Oberfläche der Klickpunkt liegt (Modellmass).
+    """GUID des Bauteils im Geschoss (None = alle Geschosse), auf dessen Oberfläche der Punkt liegt (Modellmass).
 
     Mehrere Boxen können den Punkt enthalten (Wand und Decke): die kleinste gewinnt, sie ist die
     spezifischste. Liegt keine Box um den Punkt, zählt die nächste innerhalb der dreifachen Toleranz.
     """
-    part = df[df["storey"] == storey]
+    part = df if storey is None else df[df["storey"] == storey]
     if printed_only:
         part = part[part["is_printed"]]
     p = np.asarray(point, dtype=float)

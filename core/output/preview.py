@@ -22,6 +22,7 @@ COLORS = {
     "selection": (66, 133, 255, 255),
     "stl": (255, 107, 44, 255),
     "defekt": (255, 93, 93, 230),
+    "ueberhang": (214, 26, 60, 255),
 }
 # Geschossfarben im IFC-Modus: kühle Töne, die nicht mit den Statusfarben kollidieren
 STOREY_COLORS = ["#5AA9FF", "#8E7CFF", "#2CC6C6", "#C07CE8", "#4F7CFF", "#7BD0A0", "#9AA8FF", "#3FA7D6"]
@@ -71,9 +72,17 @@ def glb(meshes: list[tuple[trimesh.Trimesh, str]], sharp: bool = True) -> bytes:
     return scene_obj.export(file_type="glb", include_normals=True)
 
 
-def stl_preview(parts: dict[str, trimesh.Trimesh], max_faces: int) -> dict[str, bytes]:
-    """GLB je Geschoss-Teil, gemeinsam auf ``max_faces`` Dreiecke reduziert (Browser-Budget)."""
+def stl_preview(parts: dict[str, trimesh.Trimesh], max_faces: int,
+                marks: dict[str, trimesh.Trimesh] | None = None) -> dict[str, bytes]:
+    """GLB je Geschoss-Teil, gemeinsam auf ``max_faces`` Dreiecke reduziert (Browser-Budget).
+
+    ``marks``: rote Markierung der Stellen, die Stützen brauchen (core/parts/overhangs.py), im selben GLB wie
+    das Teil – so folgt sie dem Ausblenden und «auseinander» im Viewer.
+    """
+    marks = marks or {}
     combined = sum(len(m.faces) for m in parts.values()) or 1
-    fraction = min(1.0, max_faces / combined)
-    return {name: glb([(decimated(m, fraction), "stl")], sharp=False) for name, m in parts.items()}
+    fraction = min(1.0, max(0.0, max_faces - sum(len(m.faces) for m in marks.values())) / combined)
+    return {name: glb([(decimated(m, fraction), "stl")] + ([(marks[name], "ueberhang")] if name in marks else []),
+                      sharp=False)
+            for name, m in parts.items()}
 

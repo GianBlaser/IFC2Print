@@ -80,6 +80,15 @@ SPECK_MIN_VOLUME_MM3 = 0.5
 PRINT_GAP_MM = 8.0              # Abstand der Teile auf einem Druckbett
 PRINT_BED_SPACING_MM = 100.0    # Abstand zweier Druckbetten in der Datei mit allen Teilen (trennt sie sichtbar)
 
+# Überhänge (core/parts/overhangs.py), Modell-mm. FDM überbrückt waagrechte Strecken bis etwa 10 mm sauber,
+# wenn sie beidseitig aufliegen (PLA/PETG mit Lüfter); längere Brücken hängen durch und brauchen Stützen.
+BRIDGE_MAX_MM = 10.0
+# Kleinere Stützflächen je Teil werden nicht gemeldet (einzelne Voxel an Kanten, Stützenköpfe). 25 mm² = 5 × 5 mm.
+OVERHANG_MIN_MM2 = 25.0
+# Liegt mindestens dieser Anteil der Stützfläche über dem Modell statt über dem Bett, lautet der Vorschlag
+# «anders zuordnen»: Stützen in den Räumen eines Massstabsmodells lassen sich kaum entfernen.
+OVERHANG_ON_MODEL_RATIO = 0.5
+
 # Mindestdicke der Wände, Laibungstiefe, Restkern, Öffnungs-Defaults, erlaubte Qualitäten und
 # Steckverbinder hängen vom Massstab ab: core.analysis.ruleset.ScaleParameters (db/seed/massstaebe.csv).
 ROOF_ZONE_MIN_HEIGHT_MM = 1000   # Dachschale mindestens so hoch (real): Träger darin zählen zum Dach

@@ -1,7 +1,8 @@
 """Erzeugung: aus der Bauteiltabelle die geschossweise geteilte, wasserdichte Voxel-Hülle machen.
 
 Zweck:   ``generate`` bereitet die Bauteile vor (core/voxels/elements.py), voxelisiert sie, setzt Geländer, Fenster und
-         Türen, teilt das Gitter in Geschoss- und Dachteile, plant optional Steckverbinder und rechnet Kennzahlen.
+         Türen, teilt das Gitter in Geschoss- und Dachteile, prüft die Überhänge je Teil, plant optional
+         Steckverbinder und rechnet Kennzahlen.
 Eingabe: IFC-Modell, Bauteiltabelle, Massstab, Voxelgrösse, Druckerprofil, Material und Öffnungsmodi.
 Ausgabe: ``Result`` (core/output/result.py) mit Teilen, Warnungen, Kennzahlen und Downloads.
 """
@@ -23,7 +24,9 @@ from core.openings.fillers import collect_openings, insert_openings
 from core.openings.windows import check_mode
 from core.output import estimate
 from core.output.result import export_watertight, Result
+from core.output.view_data import element_at_point, element_boxes
 from core.parts import partitioning
+from core.parts.overhangs import mark, message, Overhang, overhangs, summary
 from core.parts.storey_joints import storey_heights
 from core.voxels import alignment, band
 from core.voxels.elements import prepare_elements, PreparedElements
@@ -80,7 +83,10 @@ def generate(ifc: IfcModel, df: pd.DataFrame, *, scale: int, pitch_mm: float,
                             min_wall_mm=run.min_wall_mm, wall_mm=parameter.min_thickness_wall_mm, exceptions=exceptions)
     grid, opening_count, warnings = _build_grid(run, prep, mode_per_variant)
     parts, partition = _split_into_parts(run, df, grid)
-    warnings = checklist(ifc, df) + grid.warnings + warnings + list(partition.warnings) + _element_notes(prep.elements)
+    report_progress("Überhänge prüfen", 1.0)
+    supports = overhangs(partition.labels, partition.mesh_names, grid.pitch, grid.origin)
+    warnings = (checklist(ifc, df) + grid.warnings + warnings + list(partition.warnings) + _element_notes(prep.elements)
+                + _overhang_notes(run, df, supports))
     report_progress("Fertig", 1.0)
 
     leaky = [name for name, m in parts.items() if not export_watertight(m)]
@@ -88,9 +94,10 @@ def generate(ifc: IfcModel, df: pd.DataFrame, *, scale: int, pitch_mm: float,
         warnings.append("Nach dem STL-Export nicht wasserdicht: " + ", ".join(leaky) + " – im Slicer prüfen.")
     plug, connector_warnings = _connect_parts(run, grid, partition, parts)
     figures = _estimate(run, grid, parts)
+    marks = {o.name: m for o in supports if (m := mark(o, grid.pitch, grid.origin)) is not None}
     return Result(voxel_grid=grid, parts=parts, warnings=warnings + connector_warnings,
-                  metrics=_metrics(run, df, prep, parts, opening_count, figures),
-                  watertight=not leaky, plug_pieces=plug, **figures)
+                  metrics=_metrics(run, df, prep, parts, opening_count, figures, supports),
+                  watertight=not leaky, plug_pieces=plug, overhang_marks=marks, **figures)
 
 
 def scale_parameters(scale: int) -> ScaleParameters:
@@ -150,6 +157,20 @@ def _element_notes(elements: list[BuildingElement]) -> list[str]:
     return notes
 
 
+def _overhang_notes(run: _Run, df: pd.DataFrame, supports: list[Overhang]) -> list[str]:
+    """Je Teil mit Stützbedarf eine Meldung samt Bauteil an der grössten Stelle (core/parts/overhangs.py)."""
+    relevant = [o for o in supports if o.relevant]
+    if not relevant:
+        return [text] if (text := summary(supports)) else []
+    boxes = element_boxes(run.ifc, run.scale, run.angle)      # nur bei Stützbedarf: kostet bei grossen Modellen ~1 s
+    notes = []
+    for o in relevant:
+        guid = element_at_point(boxes, df, None, o.center, tolerance_mm=run.pitch_mm)
+        row = df[df["guid"] == guid].iloc[0] if guid else None
+        notes.append(message(o, None if row is None else f"{row['ifc_class']} «{row['name']}»"))
+    return notes
+
+
 def _connect_parts(run: _Run, grid: VoxelGrid, partition: partitioning.Partition,
                    parts: dict[str, trimesh.Trimesh]) -> tuple[dict[str, trimesh.Trimesh] | None, list[str]]:
     """Steckverbinder planen und einbauen; (Teile mit Steckverbindern oder None, Warnungen)."""
@@ -180,7 +201,7 @@ def _estimate(run: _Run, grid: VoxelGrid, parts: dict[str, trimesh.Trimesh]) -> 
 
 
 def _metrics(run: _Run, df: pd.DataFrame, prep: PreparedElements, parts: dict[str, trimesh.Trimesh],
-             opening_count: int, figures: dict) -> dict:
+             opening_count: int, figures: dict, supports: list[Overhang]) -> dict:
     """Kennzahlen für Oberfläche und Bericht, in der Reihenfolge der Anzeige."""
     return {
         "Schema": run.ifc.schema,
@@ -200,4 +221,5 @@ def _metrics(run: _Run, df: pd.DataFrame, prep: PreparedElements, parts: dict[st
         "Filament (g, Schätzung)": f"{figures['grams']:.1f}",
         "Kosten (CHF, Schätzung)": f"{figures['cost_chf']:.2f}",
         "Druckzeit (h, Schätzung)": f"{figures['time_h']:.1f}",
+        "Stützfläche (cm²)": f"{sum(o.support_mm2 for o in supports if o.relevant) / 100:.1f}",
     }

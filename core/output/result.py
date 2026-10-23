@@ -35,6 +35,7 @@ class Result:
     time_h: float
     watertight: bool
     plug_pieces: dict[str, trimesh.Trimesh] | None = field(default=None, repr=False)   # Teile mit Steckverbindern
+    overhang_marks: dict[str, trimesh.Trimesh] = field(default_factory=dict, repr=False)   # Stützstellen (rot im Viewer)
     # Eingaben der Kalkulation – für die Herleitung der Kennzahlen in der Oberfläche
     height_mm: float = 0.0
     layer_height_mm: float = 0.0
@@ -78,7 +79,7 @@ class Result:
     @cached_property
     def preview(self) -> dict[str, bytes]:
         """GLB je Druckteil für den Viewer (auf VIEWER_MAX_FACES reduziert); wird beim ersten Zugriff berechnet."""
-        return preview.stl_preview(self.print_parts, VIEWER_MAX_FACES)
+        return preview.stl_preview(self.print_parts, VIEWER_MAX_FACES, self.overhang_marks)
 
 
 def export_watertight(mesh: trimesh.Trimesh) -> bool:
