@@ -101,10 +101,14 @@ ROOF_ZONE_MIN_HEIGHT_MM = 1000   # Dachschale mindestens so hoch (real): Träger
 # Absätze bis JOINT_LEVELING_MM unter der Fuge (Dämmung, Bekleidung unter einer Decke) werden
 # abgeschnitten, Rücksprünge bis dahin über der Fuge aufgefüllt. Ein Vollabschnitt bis
 # JOINT_SLAB_MM gilt als Decke (darüber: Wand); tiefer liegende Deckenbereiche, die breiter als
-# JOINT_WIDTH_MM sind (z.B. TG-Dach neben dem Haus), gehen ganz ans untere Teil statt zerschnitten.
+# JOINT_WIDTH_MM sind (z.B. TG-Dach neben dem Haus), werden nicht zerschnitten – liegen sie als Deckel über
+# Räumen, werden sie ein eigenes Teil (core/parts/storey_joints.ceiling_lids).
 JOINT_LEVELING_MM = 150.0
 JOINT_SLAB_MM = 1000.0
 JOINT_WIDTH_MM = 2000.0
+# Deckel (core/parts/storey_joints.ceiling_lids): Wände bis zu dieser Dicke (real) zwischen zwei Deckenflächen gehören
+# zum Deckel; schmalere Deckenstreifen (Stürze über Türen und Fenstern) bilden keinen.
+JOINT_WALL_MAX_MM = 500.0
 # Tiefer als die Unterseite des Teils ragende Stücke (letzte Treppenstufen in der Deckenöffnung) gehen bis zu dieser
 # Tiefe (real) ans Teil darunter, sonst hingen sie unter der Bodenplatte und höben das Teil vom Bett ab.
 JOINT_OVERHANG_MM = 500.0

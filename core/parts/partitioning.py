@@ -5,9 +5,10 @@ Das Gesamtmodell liegt in EINEM Voxelgitter. Jeder Voxel erhält ein Teil-Label
 Flächen – Voraussetzung für stapelbare Geschosse.
 
 Ablauf (``partition_grid``):
-  1. Fuge je Geschossgrenze finden und je Spalte glätten (core/parts/storey_joints.py).
+  1. Fuge je Geschossgrenze finden, um bündige Decken erweitern und je Spalte glätten (core/parts/storey_joints.py).
   2. Dächer (core/parts/roof.py: geneigte Dachbauteile) erhalten ein eigenes Label.
-  3. Inseln, Kleinteile und hängende Stücke dem Nachbarteil zuordnen (core/parts/cleanup.py).
+  3. Tiefer liegende Decken über Räumen (Deckel) werden eigene Teile «Decke <Geschoss>».
+  4. Inseln, Kleinteile und hängende Stücke dem Nachbarteil zuordnen (core/parts/cleanup.py).
 Danach vernetzt ``mesh_pieces`` jedes Teil einzeln; die Anordnung auf dem Druckbett liegt in
 core/parts/print_layout.py.
 
@@ -23,9 +24,9 @@ import trimesh
 from scipy.ndimage import find_objects
 
 from config import (CAVITY_FILL_RATIO, ROOF_MIN_RATIO, JOINT_OVERHANG_MM, SPECK_MIN_VOLUME_MM3, JOINT_LEVELING_MM,
-                    JOINT_WIDTH_MM, JOINT_SLAB_MM)
+                    JOINT_SEARCH_WINDOW_BELOW_M, JOINT_WALL_MAX_MM, JOINT_WIDTH_MM, JOINT_SLAB_MM)
 from core.parts.cleanup import assign_with_message, without_sliver
-from core.parts.storey_joints import cuts, joint_columns, smooth_joint, storey_and_above
+from core.parts.storey_joints import ceiling_lids, cuts, joint_columns, smooth_joint, storey_and_above
 from core.voxels.grid import VoxelGrid
 from core.voxels.meshing import marching_cubes, postprocessed
 
@@ -48,6 +49,9 @@ def partition_grid(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]], scal
     """
     floor_plans = storey_and_above(voxel_grid, storeys, floor_plans)
     ranges, warnings = cuts(voxel_grid, storeys, scale, floor_plans)
+    # Spalten ausserhalb aller Grundrisse (Bauteile ohne Geschoss, Ränder unter dem Dach): dort gilt jede Fuge.
+    # Sonst fielen sie ans unterste Geschoss und gingen als Insel ganz an ein Nachbarteil – auch weit unter dessen Boden.
+    outside = ~floor_plans[storeys[0][0]] if floor_plans and storeys else False
     m = voxel_grid.matrix
     voxel = 1000.0 / scale / voxel_grid.pitch                       # Voxel je realem Meter
     leveling = max(1, int(JOINT_LEVELING_MM / 1000 * voxel))
@@ -56,20 +60,45 @@ def partition_grid(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]], scal
     labels = np.zeros(m.shape, dtype=np.int16)
     k_index = np.arange(m.shape[2], dtype=np.int32)
     for i, (name, k, _) in enumerate(ranges[1:], start=1):
-        height = smooth_joint(m, k, joint_columns(voxel_grid, floor_plans, name), leveling, plate, width)
+        height = smooth_joint(m, k, joint_columns(voxel_grid, floor_plans, name) | outside, leveling, plate, width,
+                              flush=True)
         labels[k_index[None, None, :] >= height[:, :, None]] = i
     names = [name for name, _, _ in ranges]
+    combined = max(1, int(m.sum()))
     if roof is not None and roof_names:
-        combined = max(1, int(m.sum()))
         for j, name in enumerate(roof_names):
             mask = (roof == j) & m
             if mask.sum() >= ROOF_MIN_RATIO * combined:
                 labels[mask] = len(names)
                 names.append(name)
     labels[~m] = -1
+    _ceiling_parts(labels, ranges, names, voxel, plate, combined)
     warnings += assign_with_message(labels, names, len(ranges), max(1, int(JOINT_OVERHANG_MM / 1000 * voxel)),
                                        voxel_grid.pitch)
     return Partition(labels, names, warnings)
+
+
+def _ceiling_parts(labels: np.ndarray, ranges: list[tuple[str, int, int]], names: list[str], voxel: float,
+                   plate: int, combined: int) -> None:
+    """Deckel als eigene Teile «Decke <Geschoss>» (core/parts/storey_joints.ceiling_lids), ab ROOF_MIN_RATIO wie Dächer.
+
+    Ein Deckel ist eine tiefer liegende Decke (z.B. TG-Dach neben dem Haus), die oben auf dem unteren Teil läge –
+    gedruckt bräuchte sie Stützen in den Räumen darunter, als eigenes Teil liegt sie flach auf dem Bett.
+    """
+    window = int(round(JOINT_SEARCH_WINDOW_BELOW_M * voxel))
+    wall = int(np.ceil(JOINT_WALL_MAX_MM / 1000 * voxel / 2))
+    boxes = find_objects(labels + 1)                    # Index w ↔ Label w (Werte sind um 1 verschoben)
+    for i, (name, _, _) in enumerate(ranges[:-1]):      # nur Geschosse mit einer Fuge darüber
+        if i >= len(boxes) or boxes[i] is None:
+            continue
+        box = boxes[i]
+        part = labels[box] == i
+        for region, cut in ceiling_lids(part, ranges[i + 1][1] - box[2].start, window, plate, wall):
+            lid = part & region[:, :, None]
+            lid[:, :, :cut] = False
+            if lid.sum() >= ROOF_MIN_RATIO * combined:
+                labels[box][lid] = len(names)
+                names.append(f"Decke {name}")
 
 
 def mesh_pieces(voxel_grid: VoxelGrid, partition: Partition,

@@ -10,7 +10,7 @@ from core.ifc.model import IfcModel
 from core.parts import partitioning
 from core.parts.cleanup import assign_islands, assign_small_pieces, assign_with_message, without_sliver
 from core.parts.print_layout import pack, print_plate
-from core.parts.storey_joints import cuts, smooth_joint, storey_and_above, storey_heights
+from core.parts.storey_joints import cuts, flush_slabs, smooth_joint, storey_and_above, storey_heights
 from core.voxels.grid import VoxelGrid
 
 _MFH = Path(__file__).parent.parent / "testdaten" / "MFH_eBKPH_Real.ifc"
@@ -260,3 +260,49 @@ def test_slab_underside_below_wall_of_upper_storey_is_trimmed():
     assert not m[8:10, :, 9].any()                      # unter der oberen Wand: kein Streifen mehr
     assert m[0, :, 8].all()                             # untere Wand bleibt
 
+
+def _house(lower_ceiling: int = 20) -> tuple[VoxelGrid, dict[str, np.ndarray]]:
+    """EG über die ganze Länge (x 0–29), OG nur links (x 0–14); Pitch 0.4, 1:200 (Geschoss 20 Schichten = 4 m).
+
+    ``lower_ceiling``: Unterseite der EG-Decke rechts (x 16–29); 20 = bündig mit der Decke unter dem OG.
+    """
+    m = np.zeros((30, 20, 44), dtype=bool)
+    m[:, :, 0:2] = True                                     # Bodenplatte EG
+    m[[0, 15, 29], :, 2:20] = True                          # Wände EG (x = 15 trägt beide Decken)
+    m[:, [0, 19], 2:20] = True
+    m[0:16, :, 20:22] = True                                # Decke unter dem OG
+    m[16:30, :, lower_ceiling:lower_ceiling + 2] = True     # Decke rechts
+    m[[29], :, lower_ceiling:20] = True                     # Wand rechts bis unter die tiefere Decke
+    m[[0, 14], :, 22:42] = m[0:15, [0, 19], 22:42] = True   # Wände OG
+    m[0:15, :, 42:44] = True                                # Dach OG (flach)
+    plans = {"EG": np.ones((30, 20), dtype=bool), "OG": np.zeros((30, 20), dtype=bool)}
+    plans["OG"][0:15] = True
+    return VoxelGrid(m, np.zeros(3), 0.4), plans
+
+
+def test_flush_slab_beyond_the_upper_floor_plan_goes_up():
+    voxel_grid, plans = _house()
+    t = partitioning.partition_grid(voxel_grid, [("EG", 0.0), ("OG", 8.0)], 200, floor_plans=plans)
+    assert t.names == ["EG", "OG"]
+    assert (t.labels[16:30, :, 20:22] == 1).all()          # Decke rechts gehört zum OG: das EG bleibt oben offen
+    assert (t.labels[29, :, 2:20] == 0).all()              # die Wand darunter bleibt beim EG
+
+
+def test_flush_slabs_ignore_walls_running_through_the_joint():
+    m = np.zeros((20, 10, 30), dtype=bool)
+    m[0:12, :, 10:12] = True                               # Decke, bündig an der Fuge 10
+    m[12, :, :] = True                                     # hohe Wand eines Flügels durch die Fuge
+    columns = np.zeros((20, 10), dtype=bool)
+    columns[0:5] = True
+    grown = flush_slabs(m, 10, columns, leveling=1, plate=12)
+    assert grown[0:12].all() and not grown[12:].any()
+
+
+def test_deep_ceiling_over_rooms_becomes_own_part():
+    voxel_grid, plans = _house(lower_ceiling=15)           # rechts 5 Schichten (1 m) tiefer: Deckel über dem EG
+    t = partitioning.partition_grid(voxel_grid, [("EG", 0.0), ("OG", 8.0)], 200, floor_plans=plans)
+    assert t.names == ["EG", "OG", "Decke EG"]
+    assert (t.labels[16:29, 1:19, 15:17] == 2).all()       # die tiefere Decke ist ein eigenes Teil
+    assert (t.labels[29, 1:19, 2:15] == 0).all()           # die Wand darunter bleibt beim EG
+    parts = partitioning.mesh_pieces(voxel_grid, t)
+    assert set(parts) == {"EG", "OG", "Decke EG"} and parts["Decke EG"].is_watertight
