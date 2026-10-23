@@ -38,6 +38,7 @@ class Viewer:
         self._rank: dict[str, int] = {}                          # Geschoss → Rang (von unten)
         self._name: dict[int, str] = {}                  # id(Objekt) → Geschoss/Teil (zum Ausblenden)
         self.hidden: set[str] = set()                 # ausgeblendete Geschosse
+        self.only_selection = False                   # nur die Ebene «selection» zeigen (Klick in der Matrix)
         self._ifc_color: dict[int, tuple[str, str]] = {}   # id(Objekt) → (Geschoss, Farbe) der IFC-Objekte
         self._focus: str | None = None
         self._z_bottom = 0.0
@@ -70,6 +71,7 @@ class Viewer:
         """Lädt die Bauteile je Geschoss: IFC-Modus (Geschossfarbe + rote Defekte) und Status-Modus."""
         self.release()
         self._clear("ifc", "status", "stl", "selection")
+        self.only_selection = False                   # die Auswahl-Ebene ist weg, sonst bliebe alles unsichtbar
         self._ifc_color.clear()
         self._object_storey.clear()
         self._rank = {g: rank for rank, g in enumerate(ifc_glb)}
@@ -134,7 +136,8 @@ class Viewer:
         for mode, plane in self._scene_layers.items():
             step = self._step(mode)
             for obj, rank in plane:
-                enabled = visible in ("ifc", "status") if mode == "selection" else mode == visible
+                enabled = (visible in ("ifc", "status") if mode == "selection"
+                           else mode == visible and not (self.only_selection and mode != "stl"))
                 obj.visible(enabled and self._name.get(id(obj)) not in self.hidden)
                 obj.move(0, 0, rank * step)
 
@@ -158,6 +161,11 @@ class Viewer:
     def hide(self, hidden: set[str]) -> None:
         """Geschosse (bzw. gleichnamige STL-Teile) aus- und wieder einblenden."""
         self.hidden = set(hidden)
+        self._apply()
+
+    def isolate(self, enabled: bool) -> None:
+        """Nur die hervorgehobenen Bauteile zeigen (IFC- und Status-Ebene aus) bzw. wieder alles."""
+        self.only_selection = enabled
         self._apply()
 
     def build_up(self, fraction: float | None) -> None:

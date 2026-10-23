@@ -142,7 +142,26 @@ class SheetElements:
         self._selection_ui()
         glb = await run.io_bound(self.s.selection_preview, self.selection_guids) if self.selection_guids else {}
         if self.page.is_alive():
+            viewer = self.page.viewer
+            if viewer.only_selection:                 # eigene Auswahl beendet das «nur diese zeigen» der Matrix
+                viewer.isolate(False)
+                self.page.panel.matrix.content.refresh()
+            viewer.highlight(glb)
+
+    async def isolate(self, status: str | None = None, storey: str | None = None) -> None:
+        """Im Viewer nur die Bauteile mit diesem Filter zeigen (Klick auf die Matrix)."""
+        if self.s.df is None:
+            return
+        guids = list(self._filtered(status, storey)["guid"])
+        glb = await run.io_bound(self.s.selection_preview, guids) if guids else {}
+        if self.page.is_alive():
             self.page.viewer.highlight(glb)
+            self.page.viewer.isolate(True)
+
+    async def show_all(self) -> None:
+        """Wieder alle Bauteile zeigen; die Auswahl der Tabelle bleibt hervorgehoben."""
+        self.page.viewer.isolate(False)
+        await self.set_selection(self.selection_guids)
 
     def _selection_ui(self) -> None:
         rows = {r["guid"]: r for r in self.table.rows}

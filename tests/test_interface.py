@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import pytest
+from nicegui import ui
 from nicegui.testing import User
 
 from db.database import Database
@@ -167,6 +168,25 @@ async def test_matrix_click_opens_elements(user: User):
     user.find(marker="matrix-kritisch").click()
     await user.should_see("prüfen ×")
     await user.should_see("nur zu druckende")
+
+
+async def test_matrix_click_shows_only_these_elements(user: User):
+    """Klick auf die Matrix zeigt im Viewer nur diese Bauteile; «alle Bauteile zeigen» hebt das auf."""
+    def visible_models() -> set[str]:
+        scene = next(iter(user.find(kind=ui.scene).elements))
+        return {o.id for o in scene.objects.values() if isinstance(o, ui.scene.gltf) and o.visible_}
+
+    await user.open("/")
+    await user.should_see(marker="matrix-druckbar", retries=50)
+    before = visible_models()
+    assert before
+    user.find(marker="matrix-druckbar").click()
+    await user.should_see(marker="matrix-alle-bauteile", retries=50)
+    isolated = visible_models()
+    assert isolated and not isolated & before          # nur noch die Auswahl-Ebene
+    user.find(marker="matrix-alle-bauteile").click()
+    await user.should_not_see(marker="matrix-alle-bauteile")
+    assert visible_models() == before
 
 
 def test_scale_suggestion_really_fits(session):
