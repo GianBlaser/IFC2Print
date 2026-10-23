@@ -13,3 +13,9 @@ __pycache__/
 
 # Grosse Architektur-Testmodelle (lokal, nicht im Repo)
 testdaten/NEU Architekturbüro/
+
+# Testdaten nie ins Repo
+testdaten/
+
+# Git-Bundles
+*.bundle
