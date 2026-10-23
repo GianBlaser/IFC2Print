@@ -1,0 +1,84 @@
+{
+  "ifc": "ARC_Modell_NEST_230328.ifc",
+  "gedruckte_bauteile_je_klasse": {
+    "IfcColumn": 31,
+    "IfcMember": 92,
+    "IfcPlate": 36,
+    "IfcSlab": 41,
+    "IfcStairFlight": 25,
+    "IfcWall": 41,
+    "IfcWallStandardCase": 550
+  },
+  "gedruckt_total": 816,
+  "huelle_gesamt": {
+    "watertight": true,
+    "volumen_cm3": 615.4,
+    "voxel": 9617645
+  },
+  "fugen_warnungen": [
+    "Teile folgen der Regel ihres Ganzen: IfcMember → IfcRoof (92), IfcPlate → IfcCurtainWall (22), IfcPlate → IfcRoof (36), IfcStairFlight → IfcStair (25).",
+    "Modell in Landeskoordinaten. Für den Export um 2'688'600 m / 1'250'800 m verschoben."
+  ],
+  "geschosse": {
+    "UG01": {
+      "watertight": true,
+      "dreiecke": 508924,
+      "volumen_cm3": 114.17,
+      "bbox_mm": [
+        193.5,
+        155.6,
+        20.5
+      ]
+    },
+    "EG00": {
+      "watertight": true,
+      "dreiecke": 525654,
+      "volumen_cm3": 70.2,
+      "bbox_mm": [
+        192.8,
+        157.2,
+        18.5
+      ]
+    },
+    "OG01": {
+      "watertight": true,
+      "dreiecke": 608208,
+      "volumen_cm3": 112.64,
+      "bbox_mm": [
+        224.4,
+        205.2,
+        20.9
+      ]
+    },
+    "OG02": {
+      "watertight": true,
+      "dreiecke": 680856,
+      "volumen_cm3": 132.2,
+      "bbox_mm": [
+        244.0,
+        217.6,
+        20.9
+      ]
+    },
+    "OG03": {
+      "watertight": true,
+      "dreiecke": 729100,
+      "volumen_cm3": 142.26,
+      "bbox_mm": [
+        244.0,
+        217.6,
+        43.6
+      ]
+    },
+    "OG04": {
+      "watertight": true,
+      "dreiecke": 311910,
+      "volumen_cm3": 43.92,
+      "bbox_mm": [
+        161.5,
+        134.0,
+        27.7
+      ]
+    }
+  }
+}
