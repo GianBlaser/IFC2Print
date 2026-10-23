@@ -77,7 +77,13 @@ class Matrix:
             tag("span", str(k.get("total", 0) + k.get("nicht_gedruckt", 0)), "matrix-summe")
 
     async def _show(self, status: str | None = None, storey: str | None = None) -> None:
-        """Bauteiltabelle mit diesem Filter öffnen und im Viewer nur diese Bauteile zeigen."""
+        """Bauteiltabelle mit diesem Filter öffnen und im Viewer nur diese Bauteile zeigen.
+
+        In der STL-Ansicht wechselt der Viewer auf STAT: Die STL-Teile sind ganze Geschosse, einzelne Bauteile
+        lassen sich dort nicht ausblenden.
+        """
+        if self.page.viewer.mode == "stl":
+            self.page.panel.set_mode("status")
         elements = self.page.sheet_elements
         elements.show_elements(status=status, storey=storey)
         await elements.isolate(status, storey)

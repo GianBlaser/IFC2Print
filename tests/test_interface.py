@@ -189,6 +189,20 @@ async def test_matrix_click_shows_only_these_elements(user: User):
     assert visible_models() == before
 
 
+async def test_matrix_click_in_stl_view_switches_to_status(user: User):
+    """In der STL-Ansicht (ganze Geschosse) wechselt ein Matrix-Klick auf STAT, sonst sähe man die Auswahl nicht."""
+    def active(mode: str) -> bool:
+        return "active" in next(iter(user.find(marker=f"ansicht-{mode}").elements)).classes
+
+    await user.open("/")
+    await user.should_see(marker="matrix-druckbar", retries=50)
+    user.find(marker="ansicht-stl").click()
+    assert active("stl")
+    user.find(marker="matrix-druckbar").click()
+    await user.should_see(marker="matrix-alle-bauteile", retries=50)
+    assert active("status") and not active("stl")
+
+
 def test_scale_suggestion_really_fits(session):
     """Der vorgeschlagene Massstab bringt alle Achsen unter 90 % des Bauraums – und ist der grösste, der das schafft."""
     from config import SCALES

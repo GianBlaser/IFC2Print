@@ -43,7 +43,7 @@ Bezeichner (Variablen, Funktionen, Dateien, Tabellenspalten) sind englisch, Komm
 - **03 Regeln:** Oben das Regelset (= Massstab, synchron mit 02). Tab «IFC-Klassen» setzt die Regel je Klasse, Tab «Bauteile» ist die Bauteiltabelle mit Filter, Sammelaktionen und Detail. Die Breite des Blatts lässt sich am rechten Rand ziehen.
 - **04 Ausgabe:** Erzeugen mit Fortschritt; danach schliesst das Blatt, die Ansicht springt auf STL.
 - **05 Prüfen:** Prüfpunkte als Karten je Kategorie (Klassen ohne Regel, defekte Geometrie, doppelte Geschosse, Ausreisser, Umgebung, Georeferenz) mit Sprung zum Beheben und Downloads (Prüfbericht, CSV, Report).
-- **Ansicht rechts:** senkrechte Leiste IFC · STAT · STL · ⇕ (auseinander). Der dunkle Balken klappt das Panel «Geschosse · Modell» auf: Ein Klick auf eine Matrix-Zelle, -Zeile oder -Spalte öffnet 03 › Bauteile mit diesem Filter und zeigt im Viewer nur diese Bauteile («alle Bauteile zeigen» blendet wieder alles ein), das Farbquadrat blendet das Geschoss aus, Hover hebt das Geschoss im Viewer hervor.
+- **Ansicht rechts:** senkrechte Leiste IFC · STAT · STL · ⇕ (auseinander). Der dunkle Balken klappt das Panel «Geschosse · Modell» auf: Ein Klick auf eine Matrix-Zelle, -Zeile oder -Spalte öffnet 03 › Bauteile mit diesem Filter und zeigt im Viewer nur diese Bauteile («alle Bauteile zeigen» blendet wieder alles ein; aus der STL-Ansicht wechselt der Viewer dafür auf STAT), das Farbquadrat blendet das Geschoss aus, Hover hebt das Geschoss im Viewer hervor.
 - **Untere Leiste:** Ausgabeziele (nur FDM umgesetzt, die übrigen als «bald» angelegt, `config.OUTPUT_TARGETS`), Kennzahlen mit Herleitung beim Darüberfahren und die Downloads. Nach einer Änderung gilt das Ergebnis als **veraltet**: Es bleibt sichtbar, die Downloads sind gesperrt, bis neu erzeugt ist.
 - Offenes Kapitel, Tab in 03, Breite von 03, Panel offen/zu und ausgeblendete Geschosse bleiben nach dem Neuladen erhalten (`app.storage.user`).
 
@@ -331,7 +331,7 @@ Wanddicken im erzeugten Gitter (`scripts/wall_thicknesses.py`, NEST, Qualität f
 | Umgebung | Virtuelle Umgebung (venv) |
 | Versionsverwaltung | Git, GitHub |
 | Editor | VS Code |
-| Tests | pytest, 290 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
+| Tests | pytest, 291 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
 
 Verwendete Bibliotheken (aus `requirements.txt`):
 

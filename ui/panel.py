@@ -38,7 +38,7 @@ class Panel:
                 ui.html(ARROW_SVG, sanitize=False)
             with ui.element("div").classes("ansicht-leiste"):
                 self.view_tabs = {m: button("", lambda m=m: self.set_mode(m), text=text).props(f'title="{title}"')
-                                  for m, text, title in VIEW_MODES}
+                                  .mark(f"ansicht-{m}") for m, text, title in VIEW_MODES}
                 tag("span", "", "ansicht-trenner")
                 with ui.element("button").classes("explode").on("click", self.toggle_exploded).props(
                         'title="Geschosse auseinander"') as self.explode_switch:
