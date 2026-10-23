@@ -1,6 +1,6 @@
 """Dachteile erkennen: Welche Bauteile bilden die Dachschale, welche Träger werden mit dem Dach gedruckt?
 
-Zweck:   Dachbauteile (und Träger im Dachraum) bekommen den Namen «Dach <Geschoss>». Die Aufteilung
+Zweck:   Dachbauteile (und Stäbe der Dachkonstruktion im Dachraum) bekommen den Namen «Dach <Geschoss>». Die Aufteilung
          (core/parts/partitioning.py) schneidet sie dadurch als eigenes Dachteil statt als Teil des Geschosses.
 Eingabe: IFC-Modell, Zeile der Bauteiltabelle (df.itertuples()), Welt-Z je Geschoss in realen mm.
 Ausgabe: Name des Dachteils oder None; Dachzonen als umschliessende Boxen (Welt, reale mm).
@@ -12,6 +12,8 @@ from config import ROOF_ABOVE_ELEVATION_MM, ROOF_INCLINATION_DEG, ROOF_ZONE_MIN_
 from core.ifc.assignment import class_family
 from core.ifc.model import IfcModel
 
+FRAME_FAMILIES = ("IfcBeam", "IfcMember")      # Stabbauteile: Pfetten, Sparren, Streben, Träger
+
 
 def roof_part(ifc: IfcModel, z: tuple, elevations: dict[str, float]) -> str | None:
     """Name des Dachteils («Dach <Geschoss>»), wenn das Bauteil zur Dachschale gehört, sonst None.
@@ -22,8 +24,7 @@ def roof_part(ifc: IfcModel, z: tuple, elevations: dict[str, float]) -> str | No
     Geschosses liegt. Flache Dachbauteile auf Bodenhöhe (in ArchiCAD z.B. Bodenaufbauten,
     Vordächer, Terrassen) gehören zum Geschoss.
     """
-    in_roof = z.class_family == "IfcRoof" or class_family(getattr(z, "aggregate", ""), ifc.schema_id) == "IfcRoof"
-    if not (in_roof or (z.class_family, z.predefined_type) in (("IfcSlab", "ROOF"), ("IfcCovering", "ROOFING"))):
+    if not (_in_roof(ifc, z) or (z.class_family, z.predefined_type) in (("IfcSlab", "ROOF"), ("IfcCovering", "ROOFING"))):
         return None
     if (p := ifc.plates.get(z.guid)) is None:
         return None
@@ -31,6 +32,11 @@ def roof_part(ifc: IfcModel, z: tuple, elevations: dict[str, float]) -> str | No
         return f"Dach {z.storey}"
     bottom = ifc.geometry[z.guid].verts[:, 2].min()
     return f"Dach {z.storey}" if z.storey in elevations and bottom > elevations[z.storey] + ROOF_ABOVE_ELEVATION_MM else None
+
+
+def _in_roof(ifc: IfcModel, z: tuple) -> bool:
+    """Ein IfcRoof oder Teil eines IfcRoof (Unterklassen eingeschlossen)."""
+    return z.class_family == "IfcRoof" or class_family(getattr(z, "aggregate", ""), ifc.schema_id) == "IfcRoof"
 
 
 def roof_zones(ifc: IfcModel, rows: list, elevations: dict[str, float]) -> dict[str, tuple[np.ndarray, np.ndarray]]:
@@ -52,12 +58,16 @@ def roof_zones(ifc: IfcModel, rows: list, elevations: dict[str, float]) -> dict[
 
 
 def roof_beam(ifc: IfcModel, z: tuple, zones: dict[str, tuple[np.ndarray, np.ndarray]]) -> str | None:
-    """Dachteil, zu dem ein Träger zählt, der in der Dachzone liegt (obwohl er einem Geschoss darunter gehört).
+    """Dachteil, zu dem ein Stab der Dachkonstruktion zählt, der in der Dachzone liegt (auch wenn er einem Geschoss
+    darunter gehört).
 
-    Solche Träger hängen frei in der Luft (unter ihnen ist nichts zu drucken) und werden
-    deshalb mit dem Dach gedruckt: Grundriss-Mitte innerhalb der Dachbox, Höhe überlappt sie.
+    Stab = Träger oder Stab (``FRAME_FAMILIES``) oder ein Dachbauteil, das keine Platte ist: ArchiCAD exportiert
+    Sparren und Pfetten des Dachwerkzeugs als IfcRoof in Balkenform. Solche Stäbe hängen frei in der Luft (unter
+    ihnen ist nichts zu drucken) und werden deshalb mit dem Dach gedruckt: Grundriss-Mitte innerhalb der Dachbox,
+    Höhe überlappt sie.
     """
-    if z.class_family != "IfcBeam" or (g := ifc.geometry.get(z.guid)) is None:
+    frame = z.class_family in FRAME_FAMILIES or (_in_roof(ifc, z) and z.guid not in ifc.plates)
+    if not frame or (g := ifc.geometry.get(z.guid)) is None:
         return None
     lo_t, hi_t = g.verts.min(axis=0), g.verts.max(axis=0)
     center = (lo_t + hi_t) / 2
@@ -68,5 +78,5 @@ def roof_beam(ifc: IfcModel, z: tuple, zones: dict[str, tuple[np.ndarray, np.nda
 
 
 def roof_name(ifc: IfcModel, z: tuple, elevations: dict[str, float], zones: dict) -> str | None:
-    """Dachteil eines Bauteils: Dachschale (``roof_part``) oder Träger in der Dachzone (``roof_beam``), sonst None."""
+    """Dachteil eines Bauteils: Dachschale (``roof_part``) oder Stab in der Dachzone (``roof_beam``), sonst None."""
     return roof_part(ifc, z, elevations) or roof_beam(ifc, z, zones)
