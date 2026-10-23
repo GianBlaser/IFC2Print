@@ -1,0 +1,91 @@
+{
+  "ifc": "ARC_Modell_NEST_230328.ifc",
+  "gedruckte_bauteile_je_klasse": {
+    "IfcColumn": 31,
+    "IfcSlab": 41,
+    "IfcStairFlight": 25,
+    "IfcWall": 41,
+    "IfcWallStandardCase": 550
+  },
+  "gedruckt_total": 688,
+  "huelle_gesamt": {
+    "watertight": true,
+    "volumen_cm3": 567.61,
+    "voxel": 8861894
+  },
+  "fugen_warnungen": [
+    "Fuge bei «OG05»: keine klare Deckenunterkante – Schnitt auf Geschoss-Z."
+  ],
+  "geschosse": {
+    "UG01": {
+      "watertight": true,
+      "dreiecke": 1246556,
+      "volumen_cm3": 116.36,
+      "bbox_mm": [
+        193.5,
+        155.6,
+        20.5
+      ]
+    },
+    "EG00": {
+      "watertight": true,
+      "dreiecke": 1302610,
+      "volumen_cm3": 59.03,
+      "bbox_mm": [
+        192.8,
+        155.7,
+        18.5
+      ]
+    },
+    "OG01": {
+      "watertight": true,
+      "dreiecke": 1810424,
+      "volumen_cm3": 106.83,
+      "bbox_mm": [
+        224.4,
+        205.2,
+        20.9
+      ]
+    },
+    "OG02": {
+      "watertight": true,
+      "dreiecke": 1756830,
+      "volumen_cm3": 119.48,
+      "bbox_mm": [
+        244.0,
+        217.6,
+        20.5
+      ]
+    },
+    "OG03": {
+      "watertight": true,
+      "dreiecke": 1838098,
+      "volumen_cm3": 127.69,
+      "bbox_mm": [
+        244.0,
+        217.6,
+        21.7
+      ]
+    },
+    "OG04": {
+      "watertight": true,
+      "dreiecke": 754466,
+      "volumen_cm3": 33.22,
+      "bbox_mm": [
+        163.5,
+        137.6,
+        16.5
+      ]
+    },
+    "OG05": {
+      "watertight": true,
+      "dreiecke": 163470,
+      "volumen_cm3": 5.0,
+      "bbox_mm": [
+        83.2,
+        93.5,
+        11.2
+      ]
+    }
+  }
+}
