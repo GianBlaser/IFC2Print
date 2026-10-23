@@ -1,0 +1,12 @@
+[project]
+name = "ifc2print"
+version = "1.0.0"
+description = "IFC → druckfertiges Massstabsmodell (STL) – HSLU Digital Twin Programmieren HS26"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+main_file = "app.py"
+filterwarnings = ["ignore:Setting the shape on a NumPy array:DeprecationWarning"]
