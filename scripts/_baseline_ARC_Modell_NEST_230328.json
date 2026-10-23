@@ -4,26 +4,38 @@
     "IfcColumn": 31,
     "IfcMember": 92,
     "IfcPlate": 36,
+    "IfcRailing": 13,
     "IfcSlab": 41,
     "IfcStairFlight": 25,
     "IfcWall": 41,
     "IfcWallStandardCase": 550
   },
-  "gedruckt_total": 816,
+  "gedruckt_total": 829,
   "huelle_gesamt": {
     "watertight": true,
-    "volumen_cm3": 615.4,
-    "voxel": 9617645
+    "volumen_cm3": 615.34,
+    "voxel": 9592908
   },
   "fugen_warnungen": [
     "Teile folgen der Regel ihres Ganzen: IfcMember → IfcRoof (92), IfcPlate → IfcCurtainWall (22), IfcPlate → IfcRoof (36), IfcStairFlight → IfcStair (25).",
-    "Modell in Landeskoordinaten. Für den Export um 2'688'600 m / 1'250'800 m verschoben."
+    "Modell in Landeskoordinaten. Für den Export um 2'688'600 m / 1'250'800 m verschoben.",
+    "18 kleine abgetrennte Stücke dem Nachbarteil gegeben.",
+    "Teil «OG05» ist kleiner als 1% des Modells und wurde an das Nachbarteil angehängt (kein eigenes STL).",
+    "«EG00»: geschlossene Hohlräume gefüllt (3, 230 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
+    "«OG01»: geschlossene Hohlräume gefüllt (6, 407 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
+    "«OG02»: geschlossene Hohlräume gefüllt (7, 533 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
+    "«OG03»: geschlossene Hohlräume gefüllt (4, 248 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
+    "92 Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).",
+    "Überhang «OG01»: 16.1 cm² brauchen Stützen, davon 16.1 cm² über dem Modell; grösste Stelle 63 × 50 mm, 4.0 mm über dem Bett (IfcSlab «Geschossdecke:F1.2__0.06:1058033»). Vorschlag: Stützen stünden im Modell und lassen sich kaum entfernen – das Bauteil besser dem Teil darüber oder dem Dachteil zuordnen (03 Regeln, Ausnahme je Bauteil).",
+    "Überhang «OG02»: 15.2 cm² brauchen Stützen, davon 15.2 cm² über dem Modell; grösste Stelle 46 × 43 mm, 4.4 mm über dem Bett (IfcSlab «Geschossdecke:F1.2__0.06:1066560»). Vorschlag: Stützen stünden im Modell und lassen sich kaum entfernen – das Bauteil besser dem Teil darüber oder dem Dachteil zuordnen (03 Regeln, Ausnahme je Bauteil).",
+    "Überhang «OG03»: 33.0 cm² brauchen Stützen, davon 17.9 cm² über dem Modell; grösste Stelle 56 × 49 mm, 4.4 mm über dem Bett (IfcSlab «Geschossdecke:F1.2__0.06:1069173»). Vorschlag: Stützen stünden im Modell und lassen sich kaum entfernen – das Bauteil besser dem Teil darüber oder dem Dachteil zuordnen (03 Regeln, Ausnahme je Bauteil).",
+    "Überhang «OG04»: 15.4 cm² brauchen Stützen, davon 0.5 cm² über dem Modell; grösste Stelle 58 × 52 mm, 3.6 mm über dem Bett (IfcSlab «Geschossdecke:F1.2_DAoT_Akustikdämmung_0.08:1068632»). Vorschlag: Stützen nur vom Druckbett aus genügen (Slicer: «Stützen nur auf dem Druckbett»)."
   ],
   "geschosse": {
     "UG01": {
       "watertight": true,
-      "dreiecke": 508924,
-      "volumen_cm3": 114.17,
+      "dreiecke": 508936,
+      "volumen_cm3": 114.16,
       "bbox_mm": [
         193.5,
         155.6,
@@ -32,8 +44,8 @@
     },
     "EG00": {
       "watertight": true,
-      "dreiecke": 525654,
-      "volumen_cm3": 70.2,
+      "dreiecke": 523520,
+      "volumen_cm3": 70.46,
       "bbox_mm": [
         192.8,
         157.2,
@@ -42,8 +54,8 @@
     },
     "OG01": {
       "watertight": true,
-      "dreiecke": 608208,
-      "volumen_cm3": 112.64,
+      "dreiecke": 588788,
+      "volumen_cm3": 111.08,
       "bbox_mm": [
         224.4,
         205.2,
@@ -52,8 +64,8 @@
     },
     "OG02": {
       "watertight": true,
-      "dreiecke": 680856,
-      "volumen_cm3": 132.2,
+      "dreiecke": 659424,
+      "volumen_cm3": 132.19,
       "bbox_mm": [
         244.0,
         217.6,
@@ -62,8 +74,8 @@
     },
     "OG03": {
       "watertight": true,
-      "dreiecke": 729100,
-      "volumen_cm3": 142.26,
+      "dreiecke": 723912,
+      "volumen_cm3": 142.14,
       "bbox_mm": [
         244.0,
         217.6,
@@ -72,10 +84,10 @@
     },
     "OG04": {
       "watertight": true,
-      "dreiecke": 311910,
-      "volumen_cm3": 43.92,
+      "dreiecke": 324346,
+      "volumen_cm3": 45.31,
       "bbox_mm": [
-        161.5,
+        162.0,
         134.0,
         27.7
       ]

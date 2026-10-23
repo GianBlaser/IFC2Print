@@ -3,25 +3,30 @@
   "gedruckte_bauteile_je_klasse": {
     "IfcColumn": 2,
     "IfcCovering": 28,
+    "IfcRailing": 8,
     "IfcSlab": 13,
     "IfcStair": 4,
     "IfcWall": 81
   },
-  "gedruckt_total": 128,
+  "gedruckt_total": 136,
   "huelle_gesamt": {
     "watertight": true,
-    "volumen_cm3": 110.76,
-    "voxel": 1731482
+    "volumen_cm3": 109.26,
+    "voxel": 1708611
   },
   "fugen_warnungen": [
     "Ohne Regel, nicht gedruckt: IfcElectricDistributionBoard (8), IfcSolarDevice (1), IfcTank (1), IfcTransportElement (1), IfcUnitaryEquipment (9) – im Regelblatt einstellbar.",
-    "Ohne eigene Regel, von der Oberklasse übernommen: IfcFurniture → IfcFurnishingElement (13), IfcSanitaryTerminal → IfcFlowTerminal (35), IfcSpaceHeater → IfcFlowTerminal (7)."
+    "Ohne eigene Regel, von der Oberklasse übernommen: IfcFurniture → IfcFurnishingElement (13), IfcSanitaryTerminal → IfcFlowTerminal (35), IfcSpaceHeater → IfcFlowTerminal (7).",
+    "4 kleine abgetrennte Stücke dem Nachbarteil gegeben, lose Splitter ohne Kontakt entfernt (12 mm³).",
+    "«Dach»: grosse geschlossene Hohlräume bleiben (1, 2381 mm³) – im Slicer das Teil nicht in Objekte trennen.",
+    "9 Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).",
+    "Überhang «EG»: 0.4 cm² brauchen Stützen; grösste Stelle 16 × 2 mm, 14.4 mm über dem Bett (IfcSlab «Vordach Hauseingang»). Vorschlag: Stützen nur vom Druckbett aus genügen (Slicer: «Stützen nur auf dem Druckbett»)."
   ],
   "geschosse": {
     "UG": {
       "watertight": true,
-      "dreiecke": 128896,
-      "volumen_cm3": 17.57,
+      "dreiecke": 128866,
+      "volumen_cm3": 17.56,
       "bbox_mm": [
         102.0,
         62.0,
@@ -30,28 +35,28 @@
     },
     "EG": {
       "watertight": true,
-      "dreiecke": 150816,
-      "volumen_cm3": 21.74,
+      "dreiecke": 146066,
+      "volumen_cm3": 20.96,
       "bbox_mm": [
         102.0,
         69.2,
-        15.6
+        15.2
       ]
     },
     "1. OG": {
       "watertight": true,
-      "dreiecke": 154746,
-      "volumen_cm3": 21.76,
+      "dreiecke": 157728,
+      "volumen_cm3": 22.0,
       "bbox_mm": [
-        124.1,
-        62.0,
+        124.0,
+        69.2,
         14.8
       ]
     },
     "2. OG": {
       "watertight": true,
-      "dreiecke": 156538,
-      "volumen_cm3": 22.21,
+      "dreiecke": 157488,
+      "volumen_cm3": 22.17,
       "bbox_mm": [
         120.0,
         62.0,
@@ -60,21 +65,21 @@
     },
     "Attika": {
       "watertight": true,
-      "dreiecke": 139866,
-      "volumen_cm3": 19.16,
+      "dreiecke": 130828,
+      "volumen_cm3": 18.03,
       "bbox_mm": [
         102.0,
         62.0,
-        16.4
+        14.8
       ]
     },
     "Dach": {
       "watertight": true,
-      "dreiecke": 69658,
-      "volumen_cm3": 8.32,
+      "dreiecke": 71378,
+      "volumen_cm3": 8.54,
       "bbox_mm": [
-        90.0,
-        50.4,
+        92.4,
+        52.0,
         14.4
       ]
     }

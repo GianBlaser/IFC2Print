@@ -11,7 +11,8 @@
     "voxel": 63362
   },
   "fugen_warnungen": [
-    "Teile folgen der Regel ihres Ganzen: IfcSlab → IfcRoof (2)."
+    "Teile folgen der Regel ihres Ganzen: IfcSlab → IfcRoof (2).",
+    "Überhänge: alle Teile ohne Stützen druckbar."
   ],
   "geschosse": {
     "00 groundfloor": {

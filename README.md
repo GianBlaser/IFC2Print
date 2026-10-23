@@ -155,6 +155,7 @@ Die Unterordner von `core/` folgen den Verarbeitungsschritten; jede `__init__.py
 | `cleanup.py` | Inseln, Kleinteile, hängende Stücke und Splitter dem Nachbarteil geben |
 | `roof.py` | Dachschale und Dachträger erkennen |
 | `print_layout.py` | Teile auf ein oder mehrere Druckbetten verteilen |
+| `overhangs.py` | Überhänge je Teil: Brücke oder Stützen, Stützen auf dem Bett oder im Modell, rote Markierung |
 | **core/connectors/** | Steckverbinder |
 | `planning.py` | Kontaktflächen zwischen Teilen finden, Verbinder je Fuge planen |
 | `joint.py` | Drei Zapfen einer Fuge platzieren, Form (rund/rechteckig) und Grösse wählen |
@@ -261,11 +262,15 @@ Als Bewertungsdicke dient die Paketdicke (alle direkt anliegenden Schichten, Spa
 - **Vernetzen:** Das Gitter wird per Marching Cubes vernetzt, geglättet (Taubin) und dezimiert (Quadric). Die Nachbearbeitung wird nur übernommen, wenn das Netz wasserdicht bleibt und sein Volumen hält (`DECIMATION_MAX_VOLUME_CHANGE`). Ob ein Teil wasserdicht ist, wird am exportierten STL (float32) geprüft, nicht nur am Netz im Speicher (`result.export_watertight`).
 - **Landeskoordinaten:** Liegt ein Modell weit vom Ursprung (z.B. LV95, x ≈ 2 600 000 m), wird es beim Einlesen im Grundriss um ganze 100 m zum Ursprung verschoben (`IfcModel.offset_mm`, ab `OFFSET_THRESHOLD_MM`). STL und GLB speichern float32, das bei solchen Koordinaten nur 1 mm auflöst; ohne Versatz wären die Teile nach dem Export undicht.
 - **Speicherbremse:** Vor dem Anlegen des Gitters wird seine Grösse gegen den Arbeitsspeicher geprüft (`shell.check_grid`, `BYTES_PER_VOXEL`, `GRID_RAM_RATIO`, Arbeitsspeicher über `psutil`, auf jedem Betriebssystem). Ist es zu gross, bricht die Erzeugung mit einem Hinweis ab (Qualität «entwurf», grösserer Massstab, Ausreisser). Ein Bauteil, das sich nicht voxelisieren lässt, wird übersprungen und mit GUID gemeldet.
-- **Geschossfugen:** Das Gesamtmodell liegt in einem Gitter; jeder Voxel erhält ein Teil-Label (Geschoss oder Dach, `core/parts/`). Geschnitten werden nur Geschosse mit gedruckten Bauteilen. Die Fuge liegt an der Deckenunterkante, wo die Voxelzahl je Schicht am stärksten ansteigt; benachbarte Teile teilen so dieselbe Fläche und sind stapelbar. Ohne klare Deckenunterkante wird auf Geschoss-Z geschnitten und eine Warnung ausgegeben.
+- **Geschossfugen:** Das Gesamtmodell liegt in einem Gitter; jeder Voxel erhält ein Teil-Label (Geschoss, Dach oder Decke, `core/parts/`). Geschnitten werden nur Geschosse mit gedruckten Bauteilen. Die Fuge liegt an der Deckenunterkante, wo die Voxelzahl je Schicht am stärksten ansteigt; benachbarte Teile teilen so dieselbe Fläche und sind stapelbar. Ohne klare Deckenunterkante wird auf Geschoss-Z geschnitten und eine Warnung ausgegeben.
   - *Nur wo das Geschoss steht:* Die Fuge eines Geschosses gilt nur dort, wo dieses oder ein höheres Geschoss steht. Ein tieferer Gebäudeflügel wird nicht von der Fuge eines höheren geschnitten.
-  - *Fuge glätten (`storey_joints.smooth_joint`):* Die Unterseite des oberen Teils bleibt eben. Kleine Absätze unter der Fuge (z.B. Dämmung unter einer Decke, bis `JOINT_LEVELING_MM` = 150 mm real) werden abgeschnitten, kleine Rücksprünge darüber aufgefüllt. Tiefer liegende Deckenbereiche, die breiter als `JOINT_WIDTH_MM` = 2 m sind (z.B. TG-Dach neben dem Haus), gehen ganz ans untere Teil; schmale Unterzüge werden an der Fuge geschnitten. Durchgehende Abschnitte über `JOINT_SLAB_MM` = 1 m gelten als Wand.
-  - *Dächer als eigene Teile:* Dachbauteile (`IfcRoof` samt seinen Teilen, `IfcSlab.ROOF`, `IfcCovering.ROOFING`, Unterklassen eingeschlossen) werden zum Teil «Dach <Geschoss>», wenn sie mehr als 5° geneigt sind oder als flaches Dach mehr als 1.5 m über der Kote ihres Geschosses liegen (`core/parts/roof.py`). Dachgruppen unter `ROOF_MIN_RATIO` (2 % des Volumens) bleiben normale Geschossbauteile.
+  - *Spalten ohne Geschoss:* Ausserhalb aller Grundrisse (Bauteile ohne Geschoss, Ränder unter dem Dach) gilt jede Fuge. Sonst fielen solche Spalten ans unterste Geschoss und gingen als Ganzes an ein Nachbarteil, auch weit unter dessen Boden.
+  - *Eine Decke gehört zum Teil darüber (`storey_joints.flush_slabs`):* Ragt eine Decke, die bündig an der Fuge liegt, über den Grundriss des oberen Geschosses hinaus (Terrasse, Flachdach eines tieferen Flügels auf gleicher Höhe), gilt die Fuge auch dort. Das untere Teil bleibt oben offen, das obere hat eine ebene Unterseite. Wände, die durch die Fuge laufen, zählen nicht dazu.
+  - *Fuge glätten (`storey_joints.smooth_joint`):* Die Unterseite des oberen Teils bleibt eben. Kleine Absätze unter der Fuge (z.B. Dämmung unter einer Decke, bis `JOINT_LEVELING_MM` = 150 mm real) werden abgeschnitten, kleine Rücksprünge darüber aufgefüllt. Tiefer liegende Deckenbereiche, die breiter als `JOINT_WIDTH_MM` = 2 m sind, werden nicht zerschnitten; schmale Unterzüge werden an der Fuge geschnitten. Durchgehende Abschnitte über `JOINT_SLAB_MM` = 1 m gelten als Wand.
+  - *Tiefer liegende Decken als eigene Teile (`storey_joints.ceiling_lids`):* Eine Decke, die oben auf dem unteren Teil läge und unter der ein Raum dieses Teils liegt (z.B. TG-Dach neben dem Haus, tiefer als die Bodenplatte darüber), wird zum Teil «Decke <Geschoss>». Als Deckel bräuchte sie Stützen in den Räumen darunter, als eigenes Teil liegt sie flach auf dem Bett und wird aufgelegt. Geschnitten wird waagrecht an der häufigsten Deckenunterseite; Wände darunter bleiben beim unteren Teil, Wände bis `JOINT_WALL_MAX_MM` = 0.5 m zwischen zwei Deckenflächen gehören zum Deckel, schmalere Streifen (Stürze) bilden keinen. Mindestgrösse wie bei den Dächern (`ROOF_MIN_RATIO`).
+  - *Dächer als eigene Teile:* Dachbauteile (`IfcRoof` samt seinen Teilen, `IfcSlab.ROOF`, `IfcCovering.ROOFING`, Unterklassen eingeschlossen) werden zum Teil «Dach <Geschoss>», wenn sie mehr als 5° geneigt sind oder als flaches Dach mehr als 1.5 m über der Kote ihres Geschosses liegen (`core/parts/roof.py`). Stäbe der Dachkonstruktion, die in der Dachzone liegen, kommen mit: `IfcBeam`, `IfcMember` und Dachbauteile, die keine Platte sind (ArchiCAD exportiert Sparren und Pfetten des Dachwerkzeugs als `IfcRoof` in Balkenform). Sonst hingen sie im Geschoss darunter frei in der Luft. Dachgruppen unter `ROOF_MIN_RATIO` (2 % des Volumens) bleiben normale Geschossbauteile.
   - *Inseln und Kleinteile:* Kleine abgetrennte Stücke eines Teils (unter `ISLAND_RATIO` = 25 % des Hauptstücks) gehen an das Nachbarteil mit der grössten Kontaktfläche. Lose Splitter ohne Kontakt entfallen; Stücke unter `SPECK_MIN_VOLUME_MM3`, die nur über Kanten hängen, werden vor dem Vernetzen entfernt. Ganze Teile unter 1 % des Volumens gehen an das angrenzende Teil. Das Ergebnis meldet, welche Teile aufgelöst wurden und wie viel Volumen verschoben oder abgeschnitten wurde.
+  - *Geschlossene Hohlräume:* Hohlräume, die ein Teil ganz umschliesst (Schacht, Zwischenraum unter einem Bodenaufbau), werden bis `CAVITY_FILL_RATIO` = 5 % des Teilvolumens gefüllt. Sie sind nach dem Druck unsichtbar, bräuchten innen Stützen und würden im Slicer beim Trennen in Objekte zu Scheinkörpern. Grössere (z.B. ein geschlossener Dachraum) bleiben hohl; beides wird gemeldet.
 - **Gefälle ebnen:** Decken, Dächer und Beläge, deren Oberseite überwiegend 0.3° bis 5° geneigt ist (`SLOPE_DEG`), werden im Voxelgitter eben gemacht: Jede Spalte wird von der tiefsten bis zur höchsten Schicht des Bauteils gefüllt. Die Decke wird dadurch um die Gefällehöhe dicker; das Ergebnis meldet die Anzahl.
 
 Die Qualität bestimmt die Voxelgrösse (Pitch) und damit Laufzeit und Detailgrad. Der Aufwand wächst etwa kubisch mit 1/Pitch.
@@ -275,6 +280,13 @@ Die Qualität bestimmt die Voxelgrösse (Pitch) und damit Laufzeit und Detailgra
 | fein | 0.4 mm |
 | entwurf | 0.8 mm |
 | auto | fein, ausser das Gitter wäre zu gross für den Arbeitsspeicher (`AUTO_GRID_RATIO`), dann entwurf |
+
+### Überhänge
+
+Nach dem Aufteilen prüft `core/parts/overhangs.py` jedes Teil so, wie es gedruckt wird (unterste Schicht auf dem Bett). Ein Voxel ist getragen, wenn in der Schicht darunter er selbst oder ein Nachbar zum selben Teil gehört (45°-Regel). Ungetragene Stellen sind Brücken, wenn getragenes Material höchstens `BRIDGE_MAX_MM` / 2 = 5 mm entfernt ist, sonst brauchen sie Stützen. Unterschieden wird, ob die Stützen auf dem Bett stehen (leicht zu entfernen) oder auf dem Modell (z.B. unter einer Decke über Räumen).
+
+- **Meldung je Teil** ab `OVERHANG_MIN_MM2` = 25 mm²: Stützfläche, davon über dem Modell, grösste Stelle (Masse, Höhe über dem Bett, Bauteil) und ein Vorschlag: «Stützen nur vom Druckbett aus genügen» oder, wenn mindestens `OVERHANG_ON_MODEL_RATIO` = 50 % über dem Modell liegen, «Bauteil dem Teil darüber oder dem Dachteil zuordnen». Ohne Stützbedarf eine Zeile «alle Teile ohne Stützen druckbar». Die Meldungen stehen in den Warnungen und im PDF-Report, die Kennzahl «Stützfläche (cm²)» bei den Kennzahlen.
+- **Rot im Viewer:** Die Stützflächen erscheinen in der STL-Ansicht als rote Flächen im Teil (zusammengefasste Quader, im selben GLB wie das Teil, daher folgen sie dem Ausblenden und «auseinander»).
 
 ### Steckverbinder
 
@@ -296,7 +308,9 @@ Testrechner mit 4 Kernen und 15 GB RAM, Qualität fein, Massstab 1:200, Fenster 
 
 Die Aufteilung des Codes in kleinere Module und die englischen Namen (Oktober 2026) haben die Ergebnisse nicht verändert: `scripts/baseline_metrics.py --all --compare` liefert über alle Testmodelle dieselben Werte wie davor.
 
-Reales ArchiCAD-Modell 4503 (1:200, fein): 8 Teile (98 TG inkl. Bodenplatte und Fundamente, 99 UG, 00 EG, 01 OG, 02 OG, Dach 02 OG, 03 DG, Dach 03 DG). Beide Mansarddächer sind eigene Teile, das TG-Dach liegt in einem Stück am TG. 45 Bauteile werden als Umgebung erkannt (darunter 15 «Aussenwände EG» auf dem Layer «011 Stützwände»), 22 freie Loggia-Fenster werden gesetzt, alle Türen und Fenster sind beidseitig vertieft.
+Reales ArchiCAD-Modell 4503 (Export vom 20.10.2026, 1:200, fein): 10 Teile (98 TG inkl. Bodenplatte und Fundamente, Decke 98 TG in zwei Stücken, 99 UG, 00 EG, 01 OG, 02 OG, Dach 02 OG, 03 DG, Dach 03 DG). Beide Mansarddächer sind eigene Teile samt Sparren und Pfetten der Dachkonstruktion (95 `IfcRoof` in Balkenform auf «045 Dachkonstruktionen»). Das TG-Dach neben dem Haus liegt 0.4 m tiefer als die Bodenplatte des UG und ist ein eigenes, flach druckbares Teil; vorher lag es als Deckel auf dem TG und brauchte 43 cm² Stützen in der Garage (jetzt 4 cm²). Vier geschlossene Hohlräume (u.a. ein Schacht von 10 × 10 × 12 mm) werden gefüllt; vorher machte der Slicer daraus beim Trennen vier Scheinobjekte. 47 Bauteile werden als Umgebung erkannt (darunter die «Aussenwände EG» auf dem Layer «011 Stützwände»), alle Türen und Fenster sind beidseitig vertieft. Die verbleibenden Stützen (TG 108 cm², UG 12 cm²) liegen unter der gestuften Bodenplatte und stehen auf dem Bett.
+
+Überhang-Test, Deckenteile und Hohlräume (23.10.2026, Cloud-Rechner mit 4 Kernen, 15 GB RAM, je ein Lauf alt und neu hintereinander): Erzeugen 4503 122.4 s → 122.0 s, Spitzenspeicher 3.44 → 3.41 GB; NEST 125.3 s → 119.2 s, 3.77 GB unverändert. Die Unterschiede liegen im Messrauschen.
 
 Wanddicken im erzeugten Gitter (`scripts/wall_thicknesses.py`, NEST, Qualität fein):
 
@@ -317,7 +331,7 @@ Wanddicken im erzeugten Gitter (`scripts/wall_thicknesses.py`, NEST, Qualität f
 | Umgebung | Virtuelle Umgebung (venv) |
 | Versionsverwaltung | Git, GitHub |
 | Editor | VS Code |
-| Tests | pytest, 276 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
+| Tests | pytest, 290 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
 
 Verwendete Bibliotheken (aus `requirements.txt`):
 
@@ -384,7 +398,7 @@ IFC2Print/
 │  ├─ packages/               #   Wandpakete
 │  ├─ voxels/                 #   Voxelgitter und Vernetzen
 │  ├─ openings/               #   Fenster und Türen
-│  ├─ parts/                  #   Geschoss- und Dachteile, Druckbett
+│  ├─ parts/                  #   Geschoss-, Dach- und Deckenteile, Überhänge, Druckbett
 │  ├─ connectors/             #   Steckverbinder
 │  └─ output/                 #   Ergebnis, Report, Kalkulation, Viewer-Daten
 ├─ db/

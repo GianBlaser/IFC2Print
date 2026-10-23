@@ -3,24 +3,30 @@
   "gedruckte_bauteile_je_klasse": {
     "IfcColumn": 2,
     "IfcCovering": 12,
+    "IfcRailing": 4,
     "IfcSlab": 9,
     "IfcStair": 4,
     "IfcWall": 44
   },
-  "gedruckt_total": 71,
+  "gedruckt_total": 75,
   "huelle_gesamt": {
     "watertight": true,
-    "volumen_cm3": 89.7,
-    "voxel": 1402483
+    "volumen_cm3": 88.31,
+    "voxel": 1381001
   },
   "fugen_warnungen": [
     "Ohne Regel, nicht gedruckt: IfcElectricDistributionBoard (7), IfcGeographicElement (1), IfcPipeSegment (12), IfcTank (1), IfcTransportElement (1), IfcUnitaryEquipment (1) – im Regelblatt einstellbar.",
-    "Ohne eigene Regel, von der Oberklasse übernommen: IfcFurniture → IfcFurnishingElement (13), IfcSanitaryTerminal → IfcFlowTerminal (24), IfcSpaceHeater → IfcFlowTerminal (6)."
+    "Ohne eigene Regel, von der Oberklasse übernommen: IfcFurniture → IfcFurnishingElement (13), IfcSanitaryTerminal → IfcFlowTerminal (24), IfcSpaceHeater → IfcFlowTerminal (6).",
+    "3 Bauteile als Umgebung nicht gedruckt. Name, Typ oder Layer deuten auf Gelände oder Stützmauer hin – je Bauteil in der Tabelle übersteuerbar.",
+    "1 kleine abgetrennte Stücke dem Nachbarteil gegeben.",
+    "15 mm³ unter der Unterseite eines Teils dem Nachbarteil gegeben.",
+    "7 Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).",
+    "Überhänge: alle Teile ohne Stützen druckbar (5.5 cm² als Brücken bis 10 mm)."
   ],
   "geschosse": {
     "UG": {
       "watertight": true,
-      "dreiecke": 125128,
+      "dreiecke": 125096,
       "volumen_cm3": 16.97,
       "bbox_mm": [
         100.0,
@@ -30,8 +36,8 @@
     },
     "EG": {
       "watertight": true,
-      "dreiecke": 148540,
-      "volumen_cm3": 21.16,
+      "dreiecke": 144144,
+      "volumen_cm3": 20.44,
       "bbox_mm": [
         102.0,
         62.0,
@@ -40,8 +46,8 @@
     },
     "1. OG": {
       "watertight": true,
-      "dreiecke": 151462,
-      "volumen_cm3": 21.38,
+      "dreiecke": 151584,
+      "volumen_cm3": 21.15,
       "bbox_mm": [
         102.0,
         71.2,
@@ -50,8 +56,8 @@
     },
     "2. OG": {
       "watertight": true,
-      "dreiecke": 153840,
-      "volumen_cm3": 21.77,
+      "dreiecke": 153968,
+      "volumen_cm3": 21.53,
       "bbox_mm": [
         102.0,
         71.2,
@@ -60,8 +66,8 @@
     },
     "Dach": {
       "watertight": true,
-      "dreiecke": 75504,
-      "volumen_cm3": 8.43,
+      "dreiecke": 74176,
+      "volumen_cm3": 8.23,
       "bbox_mm": [
         102.0,
         62.0,
