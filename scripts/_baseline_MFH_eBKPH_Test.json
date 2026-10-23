@@ -1,0 +1,72 @@
+{
+  "ifc": "MFH_eBKPH_Test.ifc",
+  "gedruckte_bauteile_je_klasse": {
+    "IfcColumn": 2,
+    "IfcCovering": 12,
+    "IfcSlab": 9,
+    "IfcStair": 4,
+    "IfcWall": 44
+  },
+  "gedruckt_total": 71,
+  "huelle_gesamt": {
+    "watertight": true,
+    "volumen_cm3": 89.7,
+    "voxel": 1402483
+  },
+  "fugen_warnungen": [
+    "Ohne Regel, nicht gedruckt: IfcElectricDistributionBoard (7), IfcGeographicElement (1), IfcPipeSegment (12), IfcTank (1), IfcTransportElement (1), IfcUnitaryEquipment (1) – im Regelblatt einstellbar.",
+    "Ohne eigene Regel, von der Oberklasse übernommen: IfcFurniture → IfcFurnishingElement (13), IfcSanitaryTerminal → IfcFlowTerminal (24), IfcSpaceHeater → IfcFlowTerminal (6)."
+  ],
+  "geschosse": {
+    "UG": {
+      "watertight": true,
+      "dreiecke": 125128,
+      "volumen_cm3": 16.97,
+      "bbox_mm": [
+        100.0,
+        60.0,
+        15.2
+      ]
+    },
+    "EG": {
+      "watertight": true,
+      "dreiecke": 148540,
+      "volumen_cm3": 21.16,
+      "bbox_mm": [
+        102.0,
+        62.0,
+        15.2
+      ]
+    },
+    "1. OG": {
+      "watertight": true,
+      "dreiecke": 151462,
+      "volumen_cm3": 21.38,
+      "bbox_mm": [
+        102.0,
+        71.2,
+        14.8
+      ]
+    },
+    "2. OG": {
+      "watertight": true,
+      "dreiecke": 153840,
+      "volumen_cm3": 21.77,
+      "bbox_mm": [
+        102.0,
+        71.2,
+        15.2
+      ]
+    },
+    "Dach": {
+      "watertight": true,
+      "dreiecke": 75504,
+      "volumen_cm3": 8.43,
+      "bbox_mm": [
+        102.0,
+        62.0,
+        4.4
+      ]
+    }
+  }
+}
