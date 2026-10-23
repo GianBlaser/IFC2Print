@@ -1,0 +1,38 @@
+{
+  "ifc": "Building-Architecture-IFC2x3.ifc",
+  "gedruckte_bauteile_je_klasse": {
+    "IfcSlab": 3,
+    "IfcWall": 4
+  },
+  "gedruckt_total": 7,
+  "huelle_gesamt": {
+    "watertight": true,
+    "volumen_cm3": 4.04,
+    "voxel": 63362
+  },
+  "fugen_warnungen": [
+    "Teile folgen der Regel ihres Ganzen: IfcSlab → IfcRoof (2)."
+  ],
+  "geschosse": {
+    "00 groundfloor": {
+      "watertight": true,
+      "dreiecke": 18274,
+      "volumen_cm3": 2.13,
+      "bbox_mm": [
+        28.7,
+        30.1,
+        18.4
+      ]
+    },
+    "Dach environment - site": {
+      "watertight": true,
+      "dreiecke": 20304,
+      "volumen_cm3": 1.91,
+      "bbox_mm": [
+        31.2,
+        33.2,
+        20.8
+      ]
+    }
+  }
+}
