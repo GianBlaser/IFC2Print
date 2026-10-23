@@ -1,0 +1,5 @@
+ruleset_name,denominator,min_thickness_wall_mm,min_thickness_railing_mm,reveal_depth_mm,min_core_reveal_mm,qualities,quality_default,connectors_allowed,window_default,door_default
+1:500,500,0.8,,0.4,0.4,fein,fein,0,vertieft,vertieft
+1:200,200,1.2,0.8,0.4,0.4,"fein,entwurf,auto",fein,1,vertieft,vertieft
+1:100,100,1.2,0.8,0.8,0.4,"fein,entwurf,auto",fein,1,vertieft,vertieft
+1:50,50,1.2,0.8,1.6,0.4,"fein,entwurf,auto",auto,1,vertieft,vertieft
