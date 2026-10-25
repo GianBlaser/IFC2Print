@@ -49,17 +49,31 @@ class Session(Settings):
         """Je Geschoss (Reihenfolge wie storeys()): Anzahl ok / kritisch / nicht druckbar / nicht gedruckt."""
         return state_views.status_matrix(self.ifc, self.df)
 
-    def classes_without_rule(self) -> list[dict]:
-        """Klassen des Modells ohne eigene Regel im Regelset: [{ifc_class_name, rule, action, category, count}]."""
-        return state_views.classes_without_rule(self.df, self.rules)
+    def classes_without_rule(self, storey: str | None = None) -> list[dict]:
+        """Klassen des Modells ohne eigene Regel im Regelset: [{ifc_class_name, rule, action, category, count}].
+
+        ``storey``: nur die Bauteile dieses Geschosses (Geschoss-Auswahl in der Matrix)."""
+        df = self.df if storey is None or self.df is None else self.df[self.df["storey"] == storey]
+        return state_views.classes_without_rule(df, self.rules)
 
     def scale_suggestion(self, overview: dict, margin: float = 0.9) -> tuple[str, float] | None:
         """Kleinster Massstab-Sprung, bei dem alle Achsen ≤ ``margin`` des Bauraums liegen: (Name, Höhe mm)."""
         return state_views.scale_suggestion(overview, self.scale_denominator, margin)
 
+    def report_context(self) -> dict:
+        """Was der PDF-Report aus der Sitzung braucht: IFC-Kopfdaten, Abmessungen und Einstellungen."""
+        return pipeline.report_context(self.ifc, self.df, self.filename, scale=self.scale_denominator,
+                                       ruleset_name=self.ruleset_name, profile=self.profile_data,
+                                       material=self.material_data, angle=self.angle, windows=self.windows,
+                                       doors=self.doors)
+
     def check_report_pdf(self) -> bytes:
-        """Prüfbericht ohne Druckteil: Kennzahlen der Analyse und alle Prüfpunkte."""
-        return state_views.check_report_pdf(self.ifc, self.df, self.filename, self.scale, self.check_points)
+        """Prüfbericht ohne Ergebnis: derselbe Report, Seite 1 ohne Urteil und Druckteile."""
+        return state_views.check_report_pdf(self.df, self.report_context(), self.check_points)
+
+    def report_pdf(self) -> bytes:
+        """PDF-Report zum Ergebnis (Übergabeblatt)."""
+        return self.result.report_pdf(self.df, self.report_context())
 
     # --- Abläufe --------------------------------------------------------------
 
@@ -159,6 +173,11 @@ class Session(Settings):
         return result
 
     # --- Modell, Vorschau und Downloads ---------------------------------------
+
+    def project_name(self) -> str:
+        """Name des IfcProject («» ohne Modell oder ohne Namen) – für die Modellkarte in Blatt 01."""
+        projects = self.ifc.model.by_type("IfcProject") if self.ifc is not None else []
+        return (projects[0].Name or "") if projects else ""
 
     def storeys(self) -> list[str]:
         return pipeline.storey_order(self.ifc, self.df)

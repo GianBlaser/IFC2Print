@@ -218,7 +218,7 @@ CONNECTOR_MAX_VOLUME_CHANGE = 0.2  # Boolean-Ergebnis verwerfen (Teil bleibt ohn
 # Ein neues Verfahren = ein Eintrag hier + eine Exportfunktion in core/.
 @dataclass(frozen=True)
 class OutputTarget:
-    key: str                      # "fdm", "resin", "laser", "3mf", "shell", "web"
+    key: str                      # "fdm", "laser", "3mf"
     name: str                     # "FDM"
     format: str                   # "STL"
     modes: tuple[str, ...]        # Ansichtsmodi rechts
@@ -233,15 +233,9 @@ _FDM_FIELDS = ("scale", "profile", "material", "selected_storeys", "quality", "w
 OUTPUT_TARGETS = (
     OutputTarget("fdm", "FDM", "STL", ("ifc", "status", "stl"), _FDM_FIELDS, ("stl", "zip", "plate"),
                 True, "Filamentdruck: wasserdichtes Volumenmodell, ganz oder je Geschoss"),
-    OutputTarget("resin", "Resin", "STL hohl", ("ifc", "status", "stl"), (), (), False,
-                "Hohl mit Drainage, feinere Details ab 1:500"),
     OutputTarget("laser", "Lasercut", "SVG/DXF", ("ifc", "layers", "boegen"), (), (), False,
                 "Gitter schichtweise als Schnittbögen"),
     OutputTarget("3mf", "3MF Farbe", "je Geschoss", ("ifc", "color"), (), (), False,
                 "Mehrfarbig, eine Farbe je Geschoss"),
-    OutputTarget("shell", "Hülle", "Analyse", ("ifc", "shell", "comparison"), (), (), False,
-                "Dichte vereinfachte Hülle für Wind-/Schatten-/Kontextstudien"),
-    OutputTarget("web", "Web/AR", "GLB", ("ifc", "explosion"), (), (), False,
-                "GLB/USDZ, Explosionsmodell, taktile Variante"),
 )
 OUTPUT_TARGET_DEFAULT = "fdm"

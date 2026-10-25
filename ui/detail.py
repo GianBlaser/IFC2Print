@@ -1,9 +1,10 @@
-"""Detailfeld eines gewählten Bauteils (Blatt 03, Tab «Bauteile»).
+"""Detail-Karte eines gewählten Bauteils, rechts neben Blatt 03.
 
-Zweck:   Zeigt Dicke real und im Modell, womit das Bauteil gedruckt wird, die wirksame Regel und die
-         Ausnahme nur für dieses Bauteil. Die Knöpfe ändern Regel oder Ausnahme; die Kopfzeile klappt das Feld ein.
-Eingabe: die Seite (page) mit Sitzung und das Blatt «Bauteile» (elements) mit der Auswahl
-Ausgabe: das Detailfeld (<aside class="detail">); leer, solange kein einzelnes Bauteil gewählt ist
+Zweck:   Zeigt Status und Aktion, Name, Klasse, Geschoss und Kategorie, die Dicke real und im Modell, die Mindestwand
+         und womit das Bauteil gedruckt wird, dazu die Ausnahme nur für dieses Bauteil (drucken, nicht drucken, wie
+         Regel). Die Regel selbst stellt man im Tab «IFC-Klassen».
+Eingabe: die Seite (page) mit Sitzung, offenem Blatt und dem Tab «Bauteile» (page.sheet_elements) mit der Auswahl
+Ausgabe: <aside class="detail-karte"> ausserhalb der Blätter; sichtbar, solange 03 offen und genau ein Bauteil gewählt ist
 """
 
 import math
@@ -12,18 +13,25 @@ import pandas as pd
 from nicegui import ui
 
 from ui.texts import EXCEPTION_BUTTONS, STATUS_CLASS_NAME
-from ui.widgets import action_buttons, button, remember, saved, set_class, tag
+from ui.widgets import button, set_class, tag
 
 
 class Detail:
-    def __init__(self, page, elements):
+    def __init__(self, page):
         self.page = page
         self.s = page.s
-        self.elements = elements
-        self.is_open = bool(saved("detail_offen", True))
-        set_class(elements.tab, "detail-zu", not self.is_open)
-        with ui.element("aside").classes("detail"):
+        with ui.element("aside").classes("detail-karte hidden") as self.card:
             self.content()
+
+    @property
+    def elements(self):
+        return self.page.sheet_elements
+
+    def show(self) -> None:
+        """Ein- oder ausblenden; die Karte steht 44 px rechts neben dem aktiven Tab (Platz für den Breitengriff)."""
+        visible = self.page.open_sheet == "regeln" and self.elements.selection is not None
+        set_class(self.card, "hidden", not visible)
+        set_class(self.card, "bauteile-tab", self.page.sheet_rules.tab == "bauteile")
 
     @ui.refreshable_method
     def content(self) -> None:
@@ -33,51 +41,36 @@ class Detail:
         if row.empty:
             return
         b = row.iloc[0]
-        status = STATUS_CLASS_NAME[b.status] if b.is_printed else "skip"
-        with ui.element("div").classes("detail-inner" + ("" if self.is_open else " zu")):
-            self._header(b, status)
-            self._thickness_box(b, status)
-            self._rule_buttons(b)
-            self._exception_buttons(b)
+        status = b.status if b.is_printed else "nicht_gedruckt"
+        css_class = STATUS_CLASS_NAME[status]
+        self._header(b, status, css_class)
+        self._facts(b, css_class)
+        self._exception_buttons(b)
 
-    def _toggle(self) -> None:
-        self.is_open = not self.is_open
-        remember("detail_offen", self.is_open)
-        set_class(self.elements.tab, "detail-zu", not self.is_open)
-        self.content.refresh()
-
-    def _header(self, b: pd.Series, status: str) -> None:
-        """Kopfzeile: Status, Aktion, Name, Klasse; ein Klick klappt das Feld ein, × hebt die Auswahl auf."""
-        with ui.element("div").classes("detail-kopf").on("click", self._toggle).props(
-                f'title="{"Detail einklappen" if self.is_open else "Detail aufklappen"}"'):
-            tag("span", "▾" if self.is_open else "▸", "detail-pfeil")
+    def _header(self, b: pd.Series, status: str, css_class: str) -> None:
+        """Kicker «STATUS · AKTION», Name, Klasse · Geschoss · Kategorie und × (hebt die Auswahl auf)."""
+        predefined = b.get("predefined_type", "") or ""
+        ifc_class = b.ifc_class + (f".{predefined}" if predefined and predefined != "NOTDEFINED" else "")
+        with ui.element("div").classes("detail-kopf"):
             with ui.element("div").classes("detail-titel"):
-                status_text = (b.status if b.is_printed else "nicht_gedruckt").replace("_", " ").upper()
-                tag("small", f"{status_text} · {b.action.upper()}", f"kicker {status}")
+                tag("small", f"{status.replace('_', ' ')} · {b.action}", f"text-{css_class}")
                 tag("h3", b["name"] or b.ifc_class)
-                tag("p", f"{b.ifc_class} · {b.storey} · {b.category}")
-            with ui.element("button").classes("detail-close").on(        # .stop: Kopfzeile nicht umschalten
-                    "click.stop", lambda: self.elements.set_selection([])).props('title="Auswahl aufheben"'):
-                tag("span", "×")
+                tag("p", f"{ifc_class} · {b.storey} · {b.category}")
+            button("detail-close", lambda: self.elements.set_selection([]), text="×").props(
+                'aria-label="Auswahl aufheben"')
 
-    def _thickness_box(self, b: pd.Series, status: str) -> None:
-        """Dicke real und im Modell, Balken zur Mindestwand und womit das Bauteil gedruckt wird."""
+    def _facts(self, b: pd.Series, css_class: str) -> None:
+        """Dicke real und im Modell, Mindestwand des Profils und womit das Bauteil gedruckt wird."""
         min_wall = self.s.profile_data["min_wall_mm"]
         d = 0.0 if math.isnan(b.thickness_model_mm) else b.thickness_model_mm
-        with ui.element("div").classes("detail-box"):
-            for left, right in (("Dicke real", f"{d * self.s.scale_denominator:.0f} mm"),
-                                (f"im Modell {self.s.scale}", f"{d:.2f} mm")):
+        with ui.element("div").classes("fakten"):
+            for word, value, color in (("Dicke real", f"{d * self.s.scale_denominator:.0f} mm", ""),
+                                       (f"im Modell {self.s.scale}", f"{d:.2f} mm", f"text-{css_class}"),
+                                       ("Mindestwand", f"{min_wall:.2f} mm", ""),
+                                       ("Gedruckt mit", self._printed_with(b, d, min_wall), "")):
                 with ui.element("div"):
-                    tag("span", left)
-                    tag("span", right, status)
-            with ui.element("span").classes(f"dicke-balken {status}"):
-                tag("i").style(f"width: {min(100, d / (2 * min_wall) * 100):.0f}%")
-            with ui.element("div"):
-                tag("span", "Mindestwand (Profil)")
-                tag("span", f"{min_wall:.2f} mm")
-            with ui.element("div").classes("summe"):
-                tag("span", "wird gedruckt mit")
-                tag("span", self._printed_with(b, d, min_wall))
+                    tag("small", word)
+                    tag("b", value, color)
 
     def _printed_with(self, b: pd.Series, d: float, min_wall: float) -> str:
         """Dicke bzw. Art, mit der das Bauteil gedruckt wird (je nach Aktion der Regel)."""
@@ -88,20 +81,12 @@ class Detail:
                 "band": f"Band {railing_band_mm:.1f} mm" if railing_band_mm else "– (keine Bänder)",
                 "verdicken": f"{max(d, min_wall):.2f} mm", "behalten": f"{d:.2f} mm"}[b.action]
 
-    def _rule_buttons(self, b: pd.Series) -> None:
-        """Aktionsknöpfe der wirksamen Regel (gilt für alle Bauteile dieser Klasse)."""
-        with ui.element("div"):
-            rule = b.rule or b.ifc_class                  # wirksame Regel: eigene, geerbte oder die des Ganzen
-            tag("div", f"Regel für {rule}" + ("" if rule == b.ifc_class else f" (gilt für {b.ifc_class})"),
-                "detail-label")
-            action_buttons(rule, b.action, self.page.sheet_rules.set_rule, b.category)
-
     def _exception_buttons(self, b: pd.Series) -> None:
         """Ausnahme nur für dieses Bauteil: drucken, nicht drucken oder wie Regel."""
-        with ui.element("div"):
-            own = self.s.exceptions.get(b.guid)
-            tag("div", "Nur dieses Bauteil" + (" (übersteuert)" if own else ""), "detail-label")
-            with ui.element("div").classes("regel-aktionen"):
+        own = self.s.exceptions.get(b.guid)
+        with ui.element("div").classes("ausnahme"):
+            tag("span", "Nur dieses Bauteil" + (" (übersteuert)" if own else ""))
+            with ui.element("div").classes("ausnahme-seg"):
                 for action, text in EXCEPTION_BUTTONS:
                     button("active" if own == action else "", lambda a=action: self.elements.set_exception(b.guid, a),
                            text=text)

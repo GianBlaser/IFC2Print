@@ -13,6 +13,7 @@ from config import SCALES
 from core import pipeline
 from core.ifc.model import IfcModel
 from core.output import report
+from core.output.report_data import build_report_data
 
 PRINT_STATUSES = ("druckbar", "kritisch", "nicht_druckbar")   # Druckbarkeitsstatus der gedruckten Bauteile
 
@@ -74,18 +75,9 @@ def scale_suggestion(overview: dict, current: int, margin: float = 0.9) -> tuple
     return None
 
 
-def check_point_sentence(point: dict) -> str:
-    """Ein Prüfpunkt als Satz für den Bericht: «Titel: Eintrag (Anzahl), …» bzw. «Titel. Erklärung»."""
-    if not point["entries"]:
-        return f"{point['title']}. {point['explanation']}"
-    entries = ", ".join(text if count is None else f"{text} ({count})" for text, count in point["entries"])
-    return f"{point['title']}: {entries}"
+def check_report_pdf(df: pd.DataFrame, context: dict, check_points: list[dict]) -> bytes:
+    """Prüfbericht ohne Ergebnis: derselbe Report wie nach dem Erzeugen, Seite 1 ohne Urteil und Druckteile.
 
-
-def check_report_pdf(ifc: IfcModel, df: pd.DataFrame, filename: str, scale: str, check_points: list[dict]) -> bytes:
-    """Prüfbericht ohne Druckteil: Kennzahlen der Analyse und alle Prüfpunkte."""
-    k = metrics(df)
-    summary = {"Datei": filename, "Schema": ifc.schema, "Massstab": scale,
-               "Bauteile": len(df), "Gedruckt": k["total"], "Kritisch": k["kritisch"],
-               "Nicht druckbar": k["nicht_druckbar"], "Nicht gedruckt": k["nicht_gedruckt"]}
-    return report.report_pdf(df, summary, {}, [check_point_sentence(p) for p in check_points])
+    ``context`` von pipeline.report_context; von den Prüfpunkten zählen die für den Druck relevanten.
+    """
+    return report.report_pdf(build_report_data(df, context, None, pipeline.for_print(check_points)))

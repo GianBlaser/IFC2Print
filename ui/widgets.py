@@ -1,7 +1,8 @@
 """Kleine Bausteine der Oberfläche, die mehrere Blätter gemeinsam brauchen.
 
 Zweck:   HTML-Elemente mit Text (tag), Knöpfe (button), Klassen schalten (set_class), Blattrahmen (sheet_frame),
-         gemerkte Ansicht (saved, remember), Zahlen- und Geschossnamen sowie die Aktionsknöpfe einer Regel.
+         Hover-Popups (popup), gemerkte Ansicht (saved, remember), Zahlen- und Geschossnamen sowie die
+         Radio-Punkte einer Regel.
 Eingabe: Texte, CSS-Klassen und Klick-Funktionen der aufrufenden Blätter
 Ausgabe: NiceGUI-Elemente, die im aktuellen Aufbau-Kontext (with-Block) entstehen
 """
@@ -13,7 +14,6 @@ from nicegui import app, ui
 from nicegui.elements.mixins.text_element import TextElement
 
 from core.analysis.ruleset import ACTIONS
-from ui.texts import ACTION_SHORT
 
 
 def mm_text(mm: float) -> str:
@@ -62,20 +62,41 @@ def button(css_classes: str, on_click: Callable, bold: str = "", text: str = "")
     return b
 
 
-def sheet_frame(title: str, seq_number: str, css_class: str = "") -> ui.element:
-    """Rahmen eines Blattes: Kopf mit Titel und Nummer (z.B. «01 / 05»); der Inhalt kommt danach hinein."""
+def popup(text: str = "") -> ui.tooltip:
+    """Hover-Popup im Stil der Oberfläche (12 px rechts / 16 px unter dem Element, ohne Verzögerung).
+
+    Mehrzeiliger Text: die erste Zeile ist fett. Ohne Text bleibt das Popup leer und nimmt Inhalt im with-Block auf."""
+    tip = ui.tooltip().classes("popup").props('anchor="bottom left" self="top left" :offset="[12, 16]"')
+    if text:
+        first, _, rest = text.partition("\n")
+        with tip:
+            if rest:
+                tag("b", first)
+                tag("div", rest)
+            else:
+                tag("span", first)
+    return tip
+
+
+def sheet_frame(title: str, css_class: str = "", aside: str = "") -> ui.element:
+    """Rahmen eines Blattes: Kopf mit Titel und optional grauem Text rechts; der Inhalt kommt danach hinein."""
     with ui.element("section").classes(f"sheet {css_class}") as sheet:
         with ui.element("div").classes("sheet-head"):
             tag("h2", title)
-            tag("span", seq_number)
+            if aside:
+                tag("span", aside)
     return sheet
 
 
-def action_buttons(ifc_class: str, active: str, on_pick: Callable, category: str = "Sonstiges") -> None:
-    """Die fünf Aktionsknöpfe einer Regel (behalten … entfernen); ``active`` ist hervorgehoben.
+def radio_buttons(ifc_class: str, active: str, on_pick: Callable, category: str = "Sonstiges",
+                  inherited: bool = False) -> None:
+    """Je Aktion ein Radio-Punkt (behalten … entfernen); ``active`` ist gewählt, gestrichelt bei geerbter Regel.
 
-    ``on_pick(ifc_class, action, category)`` wird beim Klick aufgerufen."""
-    with ui.element("div").classes("regel-aktionen"):
-        for action in ACTIONS:
-            button("active" if action == active else "", lambda a=action: on_pick(ifc_class, a, category),
-                   text=ACTION_SHORT[action]).props(f"data-aktion={action}").mark(f"regel-{ifc_class}-{action}")
+    ``on_pick(ifc_class, action, category)`` wird beim Klick aufgerufen. Die Spalte nennt die Aktion; ein Popup je
+    Punkt (5 je Zeile) würde die Liste bei jedem Neuzeichnen stark verlangsamen, darum nur aria-label."""
+    for action in ACTIONS:
+        state = "" if action != active else " geerbt" if inherited else " eigen"
+        with ui.element("div").classes("radio-zelle"):
+            with button("radio" + state, lambda a=action: on_pick(ifc_class, a, category)).props(
+                    f'aria-label="{ifc_class}: {action}"').mark(f"regel-{ifc_class}-{action}"):
+                tag("i")

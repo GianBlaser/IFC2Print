@@ -68,16 +68,17 @@ def test_bulk_action_do_not_print_and_back(session):
 
 async def test_start_page(user: User):
     await user.open("/")
-    for text in ("IFC2Print", "DATEI", "SETUP", "REGELN", "AUSGABE", "PRÜFEN", "IFC-Datei hierher ziehen oder klicken"):
+    await user.should_see(marker="titel")                    # «IFC2Print» mit oranger «2» in der Kopfzeile
+    for text in ("DATEI", "SETUP", "REGELN", "AUSGABE", "PRÜFEN", "IFC-Datei hierher ziehen oder klicken"):
         await user.should_see(text)
 
 
 async def test_start_model_appears(user: User):
-    """Beim Öffnen wird das Beispielmodell geladen und ist voll nutzbar (Modell-Info, STL erzeugen)."""
+    """Beim Öffnen wird das Beispielmodell geladen und ist voll nutzbar (Modellkarte, Matrix, STL erzeugen)."""
     await user.open("/")
     await user.should_see("Beispiel: Building-Architecture-IFC2x3.ifc", retries=50)
-    await user.should_see("Geschosse · Modell")
-    await user.should_see("im Druckbett")
+    await user.should_see("Bauraum")
+    await user.should_see(marker="geschoss-00_groundfloor")
     await user.should_see("STL erzeugen")
 
 
@@ -160,47 +161,46 @@ def test_status_matrix_sum_equals_metrics(session):
         assert sum(z[status] for z in rows) == k[status]
 
 
-async def test_matrix_click_opens_elements(user: User):
-    """Klick auf eine Matrix-Spalte → Blatt 03, Tab Bauteile, Filter gesetzt."""
+@pytest.fixture
+def mfh_start_model(monkeypatch):
+    """Beispielmodell mit mehreren Geschossen (UG, EG, 1. OG, 2. OG, Dach) für die Geschoss-Auswahl."""
+    monkeypatch.setenv("IFC2PRINT_STARTMODELL", str(MFH.parent / "MFH_eBKPH_Test.ifc"))
+
+
+async def test_matrix_click_opens_elements(user: User, mfh_start_model):
+    """Klick auf eine Geschoss-Karte wählt das Geschoss: 03 zeigt «Gefiltert auf EG»; ein zweiter Klick hebt auf."""
     await user.open("/")
-    await user.should_see("Beispiel: Building-Architecture-IFC2x3.ifc", retries=50)
-    await user.should_see(marker="matrix-kritisch", retries=50)
-    user.find(marker="matrix-kritisch").click()
-    await user.should_see("prüfen ×")
-    await user.should_see("nur zu druckende")
+    await user.should_see(marker="geschoss-EG", retries=100)
+    user.find(marker="geschoss-EG").click()
+    await user.should_see("Gefiltert auf EG", retries=50)
+    await user.should_see(marker="matrix-alle")
+    user.find(marker="geschoss-EG").click()
+    await user.should_not_see("Gefiltert auf EG", retries=50)
+    await user.should_not_see(marker="matrix-alle")
 
 
-async def test_matrix_click_shows_only_these_elements(user: User):
-    """Klick auf die Matrix zeigt im Viewer nur diese Bauteile; «alle Bauteile zeigen» hebt das auf."""
-    def visible_models() -> set[str]:
-        scene = next(iter(user.find(kind=ui.scene).elements))
-        return {o.id for o in scene.objects.values() if isinstance(o, ui.scene.gltf) and o.visible_}
+async def test_storey_selection_dims_other_storeys(user: User, mfh_start_model, monkeypatch):
+    """Nach Klick auf eine Karte dunkelt der Viewer alle anderen Geschosse ab (STAT/STL); «× alle» setzt zurück."""
+    from ui import viewer, viewer_js
+    calls = []
+    original = viewer_js.storey_dim
 
+    def recorded(scene_id, object_ids, factor, *args):
+        calls.append((list(object_ids), factor))
+        return original(scene_id, object_ids, factor, *args)
+    monkeypatch.setattr(viewer_js, "storey_dim", recorded)
     await user.open("/")
-    await user.should_see(marker="matrix-druckbar", retries=50)
-    before = visible_models()
-    assert before
-    user.find(marker="matrix-druckbar").click()
-    await user.should_see(marker="matrix-alle-bauteile", retries=50)
-    isolated = visible_models()
-    assert isolated and not isolated & before          # nur noch die Auswahl-Ebene
-    user.find(marker="matrix-alle-bauteile").click()
-    await user.should_not_see(marker="matrix-alle-bauteile")
-    assert visible_models() == before
-
-
-async def test_matrix_click_in_stl_view_switches_to_status(user: User):
-    """In der STL-Ansicht (ganze Geschosse) wechselt ein Matrix-Klick auf STAT, sonst sähe man die Auswahl nicht."""
-    def active(mode: str) -> bool:
-        return "active" in next(iter(user.find(marker=f"ansicht-{mode}").elements)).classes
-
-    await user.open("/")
-    await user.should_see(marker="matrix-druckbar", retries=50)
-    user.find(marker="ansicht-stl").click()
-    assert active("stl")
-    user.find(marker="matrix-druckbar").click()
-    await user.should_see(marker="matrix-alle-bauteile", retries=50)
-    assert active("status") and not active("stl")
+    await user.should_see(marker="geschoss-EG", retries=100)
+    calls.clear()
+    user.find(marker="geschoss-EG").click()
+    await user.should_see(marker="matrix-alle", retries=50)
+    dimmed = [ids for ids, factor in calls if factor == viewer.DIM_FACTOR]
+    assert dimmed and dimmed[-1]                             # andere Geschosse abgedunkelt
+    assert any(factor == 1 and ids for ids, factor in calls)  # das gewählte bleibt voll
+    calls.clear()
+    user.find(marker="matrix-alle").click()
+    await user.should_not_see(marker="matrix-alle", retries=50)
+    assert calls and all(factor == 1 for _, factor in calls)
 
 
 def test_scale_suggestion_really_fits(session):
@@ -231,12 +231,13 @@ def test_derivation_yields_displayed_number(session):
 
 
 async def test_remove_file_shows_empty_state(user: User):
-    """Ohne IFC: Panel und untere Leiste zeigen «Zuerst IFC laden», «Datei entfernen» verschwindet."""
+    """Ohne IFC: die Matrix bleibt ohne Geschoss-Karten, die untere Leiste zeigt «Zuerst IFC laden»."""
     await user.open("/")
-    await user.should_see(marker="matrix-kritisch", retries=50)
+    await user.should_see(marker="geschoss-00_groundfloor", retries=50)
     user.find(marker="datei-entfernen").click()
     await user.should_see("Zuerst IFC laden →")
-    await user.should_not_see(marker="matrix-kritisch")
+    await user.should_see(marker="kopf-matrix")
+    await user.should_not_see(marker="geschoss-00_groundfloor")
 
 
 def test_session_unload(session):
@@ -260,7 +261,7 @@ async def test_rule_click_updates_without_error(user: User):
     """Klick auf eine Regel: die Liste wird neu gezeichnet, danach läuft die Analyse-Anzeige ohne Fehler
     (früher brach sie ab, weil der Klick aus der gelöschten Liste heraus JavaScript aufrief)."""
     await user.open("/")
-    await user.should_see(marker="matrix-kritisch", retries=50)
+    await user.should_see(marker="geschoss-00_groundfloor", retries=50)
     user.find(marker="regel-IfcWall-verdicken").click()
     await asyncio.sleep(3)          # Analyse im Hintergrund; ein Fehler darin lässt den Test beim Abbau scheitern
 
@@ -270,14 +271,16 @@ def test_table_templates_match_the_rows(session):
     gehören zu bestehenden Spalten (nach Umbenennungen sonst still leer)."""
     from ui import texts
     from ui.sheet_elements import table_row
-    row = table_row(next(session.df.itertuples()))
-    for template in (texts.STATUS_SLOT, texts.PRINT_SLOT):
+    row = table_row(next(session.df.itertuples()), session.exceptions)
+    for template in (texts.STATUS_SLOT, texts.BODY_SLOT):
         assert set(re.findall(r"props\.row\.(\w+)", template)) <= set(row)
+    assert set(re.findall(r'key="(\w+)"', texts.BODY_SLOT)) == {c["name"] for c in texts.COLUMNS}
     source = (Path(__file__).parent.parent / "ui" / "sheet_elements.py").read_text(encoding="utf-8")
     slots = set(re.findall(r'add_slot\("body-cell-(\w+)"', source))
     assert slots <= {c["name"] for c in texts.COLUMNS}
-    emitted = set(re.findall(r"\$emit\('(\w+)'", texts.PRINT_SLOT))
-    assert emitted <= set(re.findall(r'self\.table\.on\("(\w+)"', source))
+    assert "$emit" not in texts.BODY_SLOT          # erreicht in der virtuellen Liste die Tabelle nicht
+    assert ":data-guid=" in texts.BODY_SLOT and "tr[data-guid]" in texts.ROW_CLICK_JS
+    assert 'self.table.on("click", self._row_clicked, js_handler=ROW_CLICK_JS)' in source
 
 
 def test_button_texts_are_no_identifiers():
@@ -285,3 +288,52 @@ def test_button_texts_are_no_identifiers():
     from ui import texts
     for _, text in texts.EXCEPTION_BUTTONS:
         assert "_" not in text
+
+
+# --- Oberfläche «Prototyp v2» ---------------------------------------------------------------
+
+def test_output_targets():
+    from config import OUTPUT_TARGETS
+    assert [z.key for z in OUTPUT_TARGETS] == ["fdm", "laser", "3mf"]
+
+
+def test_no_ruleset_select_in_rules_sheet():
+    """Der Massstab wird nur noch in der Kopfzeile gewählt: Blatt 03 enthält kein ui.select."""
+    source = (Path(__file__).parent.parent / "ui" / "sheet_rules.py").read_text(encoding="utf-8")
+    assert "ui.select" not in source
+
+
+async def test_sheet_heads_without_counter(user: User):
+    """Kein Seitenzähler «0x / 05» mehr in den Blattköpfen."""
+    await user.open("/")
+    await user.should_see(marker="titel")
+    await user.should_not_see("/ 05")
+
+
+async def test_message_is_closable(user: User):
+    """Die Statusmeldung (mittig unter der Kopfzeile) lässt sich mit × schliessen."""
+    await user.open("/")
+    await user.should_see(marker="geschoss-00_groundfloor", retries=50)
+    await user.should_not_see(marker="meldung-zu")                   # ohne Meldung verborgen
+    user.find(marker="regeln-zuruecksetzen").click()
+    await user.should_see("auf Standard zurückgesetzt", retries=50)
+    user.find(marker="meldung-zu").click()
+    await user.should_not_see("auf Standard zurückgesetzt")
+
+
+async def test_download_labels(user: User):
+    """Nach dem Erzeugen zeigt die untere Leiste «Gebäude», «Geschosse», «Platziert» – nicht die alten Texte."""
+    await user.open("/")
+    await user.should_see(marker="stl-erzeugen", retries=50)
+    user.find(marker="kopf-setup").click()
+    await user.should_see(marker="setup-quality-entwurf")
+    user.find(marker="setup-quality-entwurf").click()          # schneller als «fein»
+    await asyncio.sleep(0.5)
+    await user.should_see(marker="stl-erzeugen")
+    user.find(marker="stl-erzeugen").click()
+    await user.should_see(marker="download-stl", retries=600)
+    for text in ("Gebäude", "Geschosse", "Platziert"):
+        await user.should_see(text)
+    for text in ("STL komplett", "ZIP je Geschoss", "Platte"):
+        await user.should_not_see(text)
+    await user.should_not_see("Fehler")       # Meldung nach dem Erzeugen kam früher aus einem gelöschten Knopf

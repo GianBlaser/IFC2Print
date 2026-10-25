@@ -1,15 +1,17 @@
-"""Modell-Info im Panel: das Modell im Druckbett.
+"""Modellkarte in Blatt 01: das Modell im Druckbett.
 
-Zweck:   Zeigt X/Y/Z des Modells im Massstab mit Auslastung des Bauraums (passt, knapp, zu gross), bei knapp oder
-         zu gross einen Vorschlag (kleinerer Massstab, mehrere Teile), die reale Gebäudegrösse und den Sprung zu 05.
+Zweck:   Zeigt Projektname, Datei und Schema, das Urteil in der Ecke (passt, knapp, zu gross), die Isometrie von Bauraum
+         und Modell mit Massen (ui/bed_iso.py), die Kennzahlen Bauteile, Geschosse und reale Grösse und – bei knapp oder
+         zu gross – einen Vorschlag (kleinerer Massstab, mehrere Teile).
 Eingabe: die Seite (page) mit Sitzung und Modell-Übersicht (page.overview aus core.pipeline.model_overview)
-Ausgabe: der Block «Modell im Druckbett» im Panel; content.refresh() zeichnet ihn neu
+Ausgabe: die Modellkarte im Blatt 01; content.refresh() zeichnet sie neu
 """
 
 from nicegui import ui
 
-from ui.texts import BED_AXES, FIT_MARK, FIT_NOTE, TIGHT_THRESHOLD
-from ui.widgets import button, mm_text, tag
+from ui.bed_iso import COLORS, bed_iso_svg
+from ui.texts import FIT_MARK, TIGHT_THRESHOLD
+from ui.widgets import button, popup, tag
 
 
 def fit_class(fraction: float) -> str:
@@ -25,39 +27,36 @@ class ModelInfo:
     @ui.refreshable_method
     def content(self) -> None:
         u = self.page.overview
-        if u is None:
+        if u is None or self.s.ifc is None:
             return
-        with ui.element("section").classes("panel-modell"):
-            if u["dimensions_m"] is None:
-                tag("p", "Keine Geometrie auswertbar.", "hint")
-            else:
-                self._print_bed(u)
-            self._footer(u)
-
-    def _print_bed(self, u: dict) -> None:
-        """Kopf mit Urteil, eine Zeile je Achse und – bei knapp oder zu gross – der Vorschlag."""
+        if u["dimensions_m"] is None:
+            tag("p", "Keine Geometrie auswertbar.", "hint")
+            return
         model, print_bed = u["model_mm"], u["bauraum_mm"]
         severity = fit_class(max(m / b for m, b in zip(model, print_bed)))
-        with ui.element("div").classes("bett-kopf"):
-            tag("h3", f"Modell 1:{u['scale']} im Druckbett")
-            tag("span", FIT_MARK[severity], f"bett-marke {severity}")
-        with ui.element("div").classes("bett"):
-            for axis, mm, bed_mm in zip(BED_AXES, model, print_bed):
-                self._axis(axis, mm, bed_mm)
-        if severity != "ok":
-            self._suggestion(u)
-
-    def _axis(self, axis: str, mm: float, bed_mm: float) -> None:
-        """Eine Achse: Mass im Modell, Balken der Auslastung und Bauraum."""
-        fraction = mm / bed_mm
-        fit = fit_class(fraction)
-        with ui.element("div").classes(f"bett-achse {fit}"):
-            tag("span", axis, "bett-label")
-            with tag("b", mm_text(mm)):
-                tag("small", "mm")
-            with ui.element("span").classes("bett-balken").props(f'title="{fraction:.0%} des Bauraums"'):
-                tag("i").style(f"width: {min(100, fraction * 100):.0f}%")
-            tag("small", f"von {bed_mm:.0f}" + FIT_NOTE[fit], "bett-von")
+        _, side, _, line = COLORS[severity]
+        with ui.element("div").classes("modellkarte"):
+            tag("span", FIT_MARK[severity], f"urteil {severity}")
+            with ui.element("div").classes("modell-kopf"):
+                tag("b", self.s.project_name() or self.s.filename)
+                tag("small", f"{self.s.filename} · {self.s.ifc.schema}")
+            ui.html(bed_iso_svg(tuple(print_bed), tuple(model), severity), sanitize=False).classes("iso")
+            with ui.element("div").classes("modell-legende"):
+                with tag("span"):
+                    tag("i", "", "bauraum")
+                    tag("span", f"Bauraum {self.s.profile}")
+                with tag("span"):
+                    tag("i").style(f"background: {side}; border: 1px solid {line}")
+                    tag("span", f"Modell {self.s.scale}")
+            x, y, z = u["dimensions_m"]
+            with ui.element("div").classes("modell-fakten"):
+                for value, word in ((str(len(self.s.df)), "Bauteile"), (str(len(u["storeys"])), "Geschosse"),
+                                    (f"{x:.1f} × {y:.1f} × {z:.1f}", "Real (m)")):
+                    with ui.element("div"):
+                        tag("b", value)
+                        tag("small", word)
+            if severity != "ok":
+                self._suggestion(u)
 
     def _suggestion(self, u: dict) -> None:
         """Vorschlag: kleinerer Massstab, der passt, und der Hinweis auf mehrere Teile."""
@@ -69,16 +68,5 @@ class ModelInfo:
                        text=f"{name} → {height:.0f} mm hoch")
             n = len(u["storeys"])
             if n > 1:
-                tag("span", f"in {n} Teilen drucken", "vorschlag nur-hinweis").props(
-                    'title="ZIP je Geschoss in der unteren Leiste"')
-
-    def _footer(self, u: dict) -> None:
-        """Fusszeile: Gebäude real und Sprung zu den Prüfpunkten (05)."""
-        with ui.element("div").classes("panel-fuss"):
-            if u["dimensions_m"] is not None:
-                x, y, z = u["dimensions_m"]
-                text = f"Gebäude real {x:.1f} × {y:.1f} × {z:.1f} m"
-                tag("span", text, "bett-real").props(f'title="{text}"')
-            if self.s.check_points:
-                button("panel-link", lambda: self.page.go_to("pruefen", keep_open=True),
-                       text=f"{len(self.s.check_points)} ⚠ → 05")
+                with tag("span", f"in {n} Teilen drucken", "vorschlag nur-hinweis"):
+                    popup("«Geschosse» in der unteren Leiste")

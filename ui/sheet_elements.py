@@ -1,54 +1,71 @@
-"""Blatt 03 «Regeln», Tab «Bauteile»: Tabelle aller Bauteile, Filter, Auswahl und Ausnahmen.
+"""Blatt 03 «Regeln», Tab «Bauteile»: Tabelle aller Bauteile, Suche, Auswahl und Ausnahmen.
 
-Zweck:   Zeigt die Bauteile mit Status und Dicke, filtert nach Geschoss und Status (Klick in der Matrix) und hält die
-         Auswahl von Tabelle und Viewer gleich. Gewählte Bauteile lassen sich drucken, nicht drucken oder wieder
-         nach Regel behandeln; ein einzelnes Bauteil erscheint im Detailfeld (detail.py).
-Eingabe: die Seite (page) mit Sitzung, Viewer und Blattwechsel; Klicks in Tabelle, Matrix und Viewer
+Zweck:   Zeigt die Bauteile nach IFC-Klasse gruppiert (grösste Gruppe zuerst) mit Klasse, Geschoss, Dicke, Status und
+         Regel, gefiltert auf das in der Matrix gewählte Geschoss, die Suche und «nur zu druckende». Die Auswahl von
+         Tabelle und Viewer bleibt gleich; ein einzelnes Bauteil erscheint in der Detail-Karte (detail.py) und mit
+         einem Etikett im Viewer. Gewählte Bauteile lassen sich drucken, nicht drucken oder wieder nach Regel behandeln.
+Eingabe: die Seite (page) mit Sitzung, Viewer, Geschoss-Auswahl (page.floor_sel) und Blattwechsel; Klicks in Tabelle
+         und Viewer
 Ausgabe: der Tab (Element self.tab) im Blatt 03; Ausnahmen werden gespeichert und das Modell neu analysiert
 """
 
 import math
 
-import pandas as pd
 from nicegui import events, run, ui
 
-from ui.detail import Detail
-from ui.texts import COLUMNS, EXCEPTION_BUTTONS, NO_SELECTION_TEXT, PRINT_SLOT, STATUS_SHORT, STATUS_SLOT
+from ui.texts import BODY_SLOT, COLUMNS, EXCEPTION_BUTTONS, NO_SELECTION_TEXT, ROW_CLICK_JS, STATUS_CLASS_NAME
 from ui.widgets import button, set_class, tag
 
 
-def table_row(z) -> dict:
-    """Eine Tabellenzeile aus einer Zeile (itertuples) der Bauteiltabelle."""
+def table_row(z, exceptions: dict[str, str] | None = None) -> dict:
+    """Eine Tabellenzeile aus einer Zeile (itertuples) der Bauteiltabelle; ``exceptions``: GUID → Aktion."""
+    exception = z.guid in (exceptions or {})
     return {
-        "guid": z.guid, "storey": z.storey, "category": z.category, "ifc_class": z.ifc_class, "name": z.name,
+        "guid": z.guid, "storey": z.storey, "category": z.category, "ifc_class": z.ifc_class,
+        "name": z.name or z.ifc_class,
         "thickness": None if math.isnan(z.thickness_model_mm) else round(z.thickness_model_mm, 2),
-        "package": None if math.isnan(z.package_thickness_mm) else round(z.package_thickness_mm),
         "is_printed": bool(z.is_printed), "status": z.status if z.is_printed else "nicht_gedruckt",
         "action": z.action, "geometry": z.geometry,
+        "rule": "Ausnahme" if exception else z.action, "is_exception": exception,
+        "group_head": "", "group_count": 0,
     }
+
+
+def grouped_by_class(rows: list[dict]) -> list[dict]:
+    """Zeilen nach IFC-Klasse gruppiert (grösste Gruppe zuerst, darin in Tabellenreihenfolge);
+    die erste Zeile jeder Gruppe trägt den Gruppenkopf «Klasse» mit Anzahl."""
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        groups.setdefault(r["ifc_class"], []).append(r)
+    result = []
+    for ifc_class, members in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        members[0]["group_head"], members[0]["group_count"] = ifc_class, len(members)
+        result += members
+    return result
 
 
 class SheetElements:
     def __init__(self, page):
         self.page = page
         self.s = page.s
-        self.filter_status: str | None = None
-        self.filter_storey: str | None = None
+        self.search_text = ""
         self.only_printed_filter = False
         self.selection: dict | None = None         # Zeile des einzelnen gewählten Bauteils (Detail)
         self.selection_guids: list[str] = []       # alle gewählten Bauteile (Tabelle und Viewer)
         with ui.element("div").classes("tab-inhalt bauteile-tab") as self.tab:
             self._toolbar()
             self._table()
-            self.detail = Detail(page, self)
+            self.no_selection = tag("div", NO_SELECTION_TEXT, "kein-detail")
 
     def _toolbar(self) -> None:
-        """Filter-Chip, Schalter «nur zu druckende», Auswahltext und Sammelknöpfe."""
+        """Suche, Kästchen «nur zu druckende», Anzahl und – ab zwei gewählten Bauteilen – die Sammelknöpfe."""
         with ui.element("div").classes("bauteile-kopf"):
-            with ui.element("button").classes("chip hidden").on("click", self._clear_filter) as self.filter_chip:
-                self.filter_text = tag("span")
-            ui.checkbox("nur zu druckende", on_change=self._only_printed).props("dense size=xs").classes("check")
-            self.selection_info = tag("span", NO_SELECTION_TEXT, "hint")
+            self.search_input = ui.input(placeholder="Bauteil suchen", on_change=self._search).props(
+                "dense outlined clearable debounce=150").classes("suchfeld")
+            with ui.element("button").classes("nur-druck").on("click", self._toggle_only_printed) as self.only_printed_box:
+                tag("i")
+                tag("span", "nur zu druckende")
+            self.count_text = tag("span", "", "anzahl")
             with ui.element("div").classes("sammel hidden") as self.bulk:
                 for action, text in EXCEPTION_BUTTONS:
                     button("", lambda a=action: self.selection_action(a), text=text)
@@ -57,71 +74,63 @@ class SheetElements:
     def _table(self) -> None:
         self.table = ui.table(rows=[], columns=COLUMNS, row_key="guid", pagination=0, selection="multiple",
                               on_select=lambda e: self.set_selection([r["guid"] for r in e.selection])
-                              ).props("flat dense virtual-scroll hide-bottom").classes("tabelle bauteile")
-        self.table.add_slot("body-cell-status", STATUS_SLOT)
-        self.table.add_slot("body-cell-is_printed", PRINT_SLOT)
-        self.table.on("toggle_print", lambda e: self.set_exceptions([e.args[0]], "behalten" if e.args[1] else "entfernen"))
-        self.table.on("rowClick", self._row_clicked, args=[["ctrlKey", "metaKey", "shiftKey"], None])
+                              ).props("flat dense virtual-scroll hide-bottom").classes("tabelle bauteile duenn")
+        self.table.add_slot("header-selection", "")
+        self.table.add_slot("body", BODY_SLOT)
+        self.table.on("click", self._row_clicked, js_handler=ROW_CLICK_JS)
 
     def clear(self) -> None:
         """Ohne Modell: Auswahl und Tabelle leeren."""
         self.selection_guids, self.selection = [], None
         self.table.rows = []
         self.table.update()
+        self.count_text.set_text("")
+        self.page.viewer.label(None)
 
     # --- Filter und Tabelle ---------------------------------------------------------------
 
-    def show_elements(self, status: str | None = None, storey: str | None = None) -> None:
-        """Blatt 03 › Bauteile mit diesem Filter öffnen (Klick auf Matrix, Geometrie-Zeile, Viewer)."""
-        self.filter_status, self.filter_storey = status, storey
+    def show_printed(self) -> None:
+        """Blatt 03 › Bauteile mit «nur zu druckende» öffnen (Kachel «Bauteile gedruckt» in 04)."""
+        self.only_printed_filter = True
+        set_class(self.only_printed_box, "an", True)
         self.page.go_to("regeln", keep_open=True)
         self.page.sheet_rules.select_tab("bauteile")
         self.fill_table()
 
-    def _clear_filter(self) -> None:
-        self.filter_status = self.filter_storey = None
+    def _search(self, e: events.ValueChangeEventArguments) -> None:
+        self.search_text = (e.value or "").strip().lower()
         self.fill_table()
 
-    def _only_printed(self, e: events.ValueChangeEventArguments) -> None:
-        self.only_printed_filter = e.value
+    def _toggle_only_printed(self) -> None:
+        self.only_printed_filter = not self.only_printed_filter
+        set_class(self.only_printed_box, "an", self.only_printed_filter)
         self.fill_table()
-
-    def _filtered(self, status: str | None, storey: str | None) -> pd.DataFrame:
-        """Bauteile nach dem Filter aus der Matrix (Status, «geometry», «nicht_gedruckt») und Geschoss."""
-        df = self.s.df
-        if status == "geometry":
-            df = df[df["geometry"] != "ok"]
-        elif status == "nicht_gedruckt":
-            df = df[~df["is_printed"]]
-        elif status:
-            df = df[df["is_printed"] & (df["status"] == status)]
-        if storey:
-            df = df[df["storey"] == storey]
-        return df
 
     def fill_table(self) -> None:
-        """Tabelle nach Filter neu füllen; Auswahl und Filter-Chip nachführen."""
+        """Tabelle nach Geschoss, Suche und «nur zu druckende» neu füllen; Auswahl und Anzahl nachführen."""
         if self.s.df is None:
             return
-        df = self._filtered(self.filter_status, self.filter_storey)
+        df = self.s.df
+        if self.page.floor_sel:
+            df = df[df["storey"] == self.page.floor_sel]
+        if self.search_text:
+            df = df[df["name"].fillna("").str.lower().str.contains(self.search_text, regex=False)
+                    | df["ifc_class"].str.lower().str.contains(self.search_text, regex=False)]
         if self.only_printed_filter:
             df = df[df["is_printed"]]
-        self.table.rows = [table_row(z) for z in df.itertuples()]
+        self.table.rows = grouped_by_class([table_row(z, self.s.exceptions) for z in df.itertuples()])
         chosen = set(self.selection_guids)
         self.table.selected = [r for r in self.table.rows if r["guid"] in chosen]
         self.table.update()
-        status_text = STATUS_SHORT.get(self.filter_status, self.filter_status)
-        filter_text = " · ".join(f for f in (self.filter_storey, status_text) if f)
-        self.filter_text.set_text(f"{filter_text} ×")
-        set_class(self.filter_chip, "hidden", not filter_text)
+        self.count_text.set_text(f"{len(self.table.rows)} Bauteile")
+        self.page.sheet_rules.show_filter()
 
     # --- Auswahl: Tabelle ↔ Viewer ---------------------------------------------------------
 
     async def _row_clicked(self, e: events.GenericEventArguments) -> None:
         """Klick = nur dieses Bauteil wählen (nochmals = abwählen) und die Kamera darauf richten;
         Strg/Cmd/Shift-Klick ergänzt die Auswahl."""
-        modifier, guid = e.args[0], e.args[1]["guid"]
-        multi_select = any(modifier.get(k) for k in ("ctrlKey", "metaKey", "shiftKey"))
+        guid, multi_select = e.args["guid"], bool(e.args["multi"])
         await self._toggle_selection(guid, multi_select)
         if not multi_select and self.selection_guids == [guid] and self.page.is_alive():
             box = await run.io_bound(self.s.element_box, guid)
@@ -137,31 +146,26 @@ class SheetElements:
         await self.set_selection(guids)
 
     async def set_selection(self, guids: list[str]) -> None:
-        """Gewählte Bauteile übernehmen: Tabelle, Detail, Sammelleiste und Hervorhebung im Viewer."""
+        """Gewählte Bauteile übernehmen: Tabelle, Detail, Sammelknöpfe, Hervorhebung und Etikett im Viewer."""
         self.selection_guids = list(dict.fromkeys(guids))
         self._selection_ui()
         glb = await run.io_bound(self.s.selection_preview, self.selection_guids) if self.selection_guids else {}
-        if self.page.is_alive():
-            viewer = self.page.viewer
-            if viewer.only_selection:                 # eigene Auswahl beendet das «nur diese zeigen» der Matrix
-                viewer.isolate(False)
-                self.page.panel.matrix.content.refresh()
-            viewer.highlight(glb)
-
-    async def isolate(self, status: str | None = None, storey: str | None = None) -> None:
-        """Im Viewer nur die Bauteile mit diesem Filter zeigen (Klick auf die Matrix)."""
-        if self.s.df is None:
-            return
-        guids = list(self._filtered(status, storey)["guid"])
-        glb = await run.io_bound(self.s.selection_preview, guids) if guids else {}
+        single = self.selection_guids[0] if len(self.selection_guids) == 1 else None
+        box = await run.io_bound(self.s.element_box, single) if single else None
         if self.page.is_alive():
             self.page.viewer.highlight(glb)
-            self.page.viewer.isolate(True)
+            self._show_label(single, box)
 
-    async def show_all(self) -> None:
-        """Wieder alle Bauteile zeigen; die Auswahl der Tabelle bleibt hervorgehoben."""
-        self.page.viewer.isolate(False)
-        await self.set_selection(self.selection_guids)
+    def _show_label(self, guid: str | None, box: tuple | None) -> None:
+        """Etikett «Name + Status» am einzeln gewählten Bauteil, sonst keines."""
+        row = self.s.df[self.s.df["guid"] == guid] if guid and box is not None and self.s.df is not None else None
+        if row is None or row.empty or self.selection_guids != [guid]:          # Auswahl inzwischen geändert
+            self.page.viewer.label(None)
+            return
+        b = row.iloc[0]
+        status = b.status if b.is_printed else "nicht_gedruckt"
+        self.page.viewer.label(box, b.storey, b["name"] or b.ifc_class, status.replace("_", " "),
+                               STATUS_CLASS_NAME[status])
 
     def _selection_ui(self) -> None:
         rows = {r["guid"]: r for r in self.table.rows}
@@ -169,11 +173,10 @@ class SheetElements:
         self.table.update()
         n = len(self.selection_guids)
         self.selection = rows.get(self.selection_guids[0]) if n == 1 else None
-        set_class(self.tab, "has-detail", bool(self.selection))
-        self.selection_info.set_text(NO_SELECTION_TEXT if n == 0 else
-                                     "1 Bauteil gewählt" if n == 1 else f"{n} Bauteile gewählt")
-        set_class(self.bulk, "hidden", not n)
-        self.detail.content.refresh()
+        set_class(self.no_selection, "hidden", n > 0)
+        set_class(self.bulk, "hidden", n < 2)
+        self.page.detail.content.refresh()
+        self.page.detail.show()
 
     def _guid_at(self, hits: list) -> str | None:
         """Bauteil an den Treffern des Viewers (nah → fern); läuft im Hintergrund-Thread."""
@@ -190,7 +193,12 @@ class SheetElements:
         if guid is None or not self.page.is_alive():
             return
         if guid not in {r["guid"] for r in self.table.rows}:      # Filter blendet das Bauteil aus
-            self.filter_status = self.filter_storey = None
+            self.search_text, self.only_printed_filter = "", False
+            self.search_input.set_value("")
+            set_class(self.only_printed_box, "an", False)
+            storey = self.s.df.loc[self.s.df["guid"] == guid, "storey"]
+            if self.page.floor_sel and not storey.empty and storey.iloc[0] != self.page.floor_sel:
+                await self.page.select_storey(None)              # Bauteil liegt in einem anderen Geschoss
             self.fill_table()
         self.page.go_to("regeln", keep_open=True)
         self.page.sheet_rules.select_tab("bauteile")

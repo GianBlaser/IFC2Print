@@ -15,7 +15,7 @@ class SheetHistory:
     def __init__(self, page):
         self.page = page
         self.s = page.s
-        with sheet_frame("Exportverlauf", "Verlauf", "sheet-xwide") as self.sheet:
+        with sheet_frame("Verlauf", "sheet-verlauf", aside="Exporte") as self.sheet:
             self.content()
 
     @ui.refreshable_method
@@ -26,4 +26,4 @@ class SheetHistory:
             return
         rows = [{**row, "connectors": "ja" if row.get("connectors") else "nein"} for row in runs]
         columns = [{"name": key, "label": label, "field": key, "align": "left"} for key, label in HISTORY_COLUMNS]
-        ui.table(rows=rows, row_key="id", columns=columns).props("flat dense").classes("tabelle")
+        ui.table(rows=rows, row_key="id", columns=columns).props("flat dense").classes("tabelle duenn")

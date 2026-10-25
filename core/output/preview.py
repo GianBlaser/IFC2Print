@@ -15,10 +15,10 @@ from core.voxels.meshing import decimated
 
 # RGBA je Darstellung (sRGB)
 COLORS = {
-    "druckbar": (31, 181, 160, 255),
-    "kritisch": (242, 169, 59, 255),
-    "nicht_druckbar": (229, 72, 77, 255),
-    "ausgeschlossen": (138, 148, 163, 46),
+    "druckbar": (147, 216, 196, 255),          # Statusfarben «Pastell · Mint & Pfirsich» (wie ui/theme.css)
+    "kritisch": (255, 201, 163, 255),
+    "nicht_druckbar": (244, 166, 180, 255),
+    "ausgeschlossen": (214, 217, 222, 46),
     "selection": (66, 133, 255, 255),
     "stl": (255, 107, 44, 255),
     "defekt": (255, 93, 93, 230),

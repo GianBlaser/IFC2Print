@@ -16,36 +16,38 @@ Bezeichner (Variablen, Funktionen, Dateien, Tabellenspalten) sind englisch, Komm
 
 ## Was das Programm tut
 
-1. **Upload:** Beim Öffnen erscheint ein Beispielmodell (`config.START_MODEL`, voll nutzbar). Eine eigene IFC-Datei wird in der Oberfläche hochgeladen und einmalig trianguliert. Im Setup werden Massstab, Druckerprofil, Material, Geschosse, Qualität, Fenster und Türen, die automatische Ausrichtung und die Steckverbinder gewählt.
-2. **Analyse/Status:** Jedes Bauteil erhält im gewählten Massstab einen Druckbarkeitsstatus (druckbar, kritisch, nicht druckbar), der in der Bauteiltabelle und im 3D-Viewer sichtbar ist. Das Panel «Geschosse · Modell» rechts zeigt die Matrix Geschoss × Status, die Druckbett-Auslastung je Achse (mit Massstab-Vorschlag, wenn es knapp wird) und einen Geometrie-Check (ok / fehlt / defekt).
+1. **Upload:** Beim Öffnen erscheint ein Beispielmodell (`config.START_MODEL`, voll nutzbar). Eine eigene IFC-Datei wird in der Oberfläche hochgeladen und einmalig trianguliert. Im Setup (Kopfzeile) werden Massstab, Druckerprofil, Material, Geschosse, Qualität, Fenster und Türen, die automatische Ausrichtung und die Steckverbinder gewählt.
+2. **Analyse/Status:** Jedes Bauteil erhält im gewählten Massstab einen Druckbarkeitsstatus (druckbar, kritisch, nicht druckbar), der in der Bauteiltabelle und im 3D-Viewer sichtbar ist. Die Kopfzeile zeigt im Modus Matrix je Geschoss eine Karte mit den Anzahlen je Status; Blatt 01 zeigt das Modell isometrisch im Bauraum des Druckers mit Massen und Urteil (passt / knapp / zu gross, mit Massstab-Vorschlag, wenn es knapp wird).
 3. **Regeln:** Ein Regelwerk je Massstab legt je IFC-Klasse fest, ob ein Bauteil behalten, verdickt, durch einen Füllquader ersetzt, als Band (Geländer) gedruckt oder entfernt wird. Plattenartige Bauteile (Wände, Decken, Dächer, Bekleidungen) werden zu Paketen zusammengefasst und paketweise auf ganze Voxel skaliert. Bauteile der Umgebung (Stützmauern, Terrain) werden erkannt und nicht gedruckt; jedes Bauteil lässt sich einzeln übersteuern.
 4. **Erzeugen:** Die druckbaren Bauteile werden in ein gemeinsames Voxelgitter gelegt, Fenster und Türen wirken auf dieses Gitter, Öffnungen ohne Fenster oder Tür (Treppenaugen, Schächte) werden ausgeschnitten. Danach wird das Gitter in Geschoss- und Dachteile aufgeteilt, zu wasserdichten Teilen vernetzt, optional mit Steckverbindern versehen und mit Filament-, Kosten- und Zeitschätzung ergänzt. Pro Sitzung läuft nur eine Erzeugung gleichzeitig; das Gebäude baut sich im Viewer synchron zum Fortschritt von unten nach oben auf.
-5. **Downloads:** STL komplett, ZIP mit einer STL je Teil (Geschoss bzw. Dach), Druckplatte (alle Teile auf dem Druckbett verteilt), PDF-Report, Prüfbericht (PDF) und CSV der Bauteiltabelle.
+5. **Downloads:** «Gebäude» (eine STL), «Geschosse» (ZIP mit einer STL je Teil, Geschoss bzw. Dach), «Platziert» (alle Teile auf dem Druckbett verteilt), PDF-Report, Prüfbericht (PDF) und CSV der Bauteiltabelle.
 
 ### Bedienung
 
 ```
-┌──────┬──────────────────────────────────────────────┬───┬──┐
-│ LOGO │  Kapitel-Blatt (01–05)          3D-Viewer    │ ◂ │IFC│
-│  01  │  03: Tabs «IFC-Klassen» | «Bauteile»         │   │STA│
-│  02  │      Breite per Griff ziehbar ⇔              │ ▌ │STL│
-│  03  │                                     [Panel   │   │ ⇕ │
-│  04  │                                     Geschosse│   └──┘
-│ ──── │                                     · Modell]│
-│  05● │                                              │
-│  ↺   ├──────────────────────────────────────────────┴──────┤
-│      │ AUSGABEZIEL [FDM] [Resin bald] [Lasercut bald] …     │
-│      │ Filament ⓘ | Druckzeit ⓘ | Kosten ⓘ | Downloads      │
-└──────┴──────────────────────────────────────────────────────┘
+┌──────┬───────────────────────────────────────────────────────────┐
+│ LOGO │ IFC2Print [Setup|Matrix]   Matrix: Karte je Geschoss | Σ   │
+│  01  │ Legende                    Setup:  1 Massstab … 9 Verbinder│
+│  02  ├───────────────────┐                                  ┌──┐ │
+│  03  │ Kapitel-Blatt     │ ⇔ Griff (03)     3D-Viewer       │IF│ │
+│  04  │ 01, 03–05,        │   [Detail-Karte]                 │ST│ │
+│ ──── │ Verlauf           │                                  │SL│ │
+│  05● │                   │                                  │⇕ │ │
+│  ↺   ├───────────────────┴──────────────────────────────────┴──┴─┤
+│  ◐   │ FDM │ BALD Lasercut · 3MF │ Filament ⓘ │ Druckzeit ⓘ │     │
+│      │ Kosten ⓘ │ Gebäude │ Geschosse · Platziert                │
+└──────┴───────────────────────────────────────────────────────────┘
 ```
 
-- **Leiste links:** 01 Datei · 02 Setup · 03 Regeln · 04 Ausgabe, unter dem Trennstrich 05 Prüfen (Zähler = Anzahl Prüfpunkte), unten ↺ Verlauf. Erledigte Kapitel tragen ein ✓.
-- **03 Regeln:** Oben das Regelset (= Massstab, synchron mit 02). Tab «IFC-Klassen» setzt die Regel je Klasse, Tab «Bauteile» ist die Bauteiltabelle mit Filter, Sammelaktionen und Detail. Die Breite des Blatts lässt sich am rechten Rand ziehen.
-- **04 Ausgabe:** Erzeugen mit Fortschritt; danach schliesst das Blatt, die Ansicht springt auf STL.
-- **05 Prüfen:** Prüfpunkte als Karten je Kategorie (Klassen ohne Regel, defekte Geometrie, doppelte Geschosse, Ausreisser, Umgebung, Georeferenz) mit Sprung zum Beheben und Downloads (Prüfbericht, CSV, Report).
-- **Ansicht rechts:** senkrechte Leiste IFC · STAT · STL · ⇕ (auseinander). Der dunkle Balken klappt das Panel «Geschosse · Modell» auf: Ein Klick auf eine Matrix-Zelle, -Zeile oder -Spalte öffnet 03 › Bauteile mit diesem Filter und zeigt im Viewer nur diese Bauteile («alle Bauteile zeigen» blendet wieder alles ein; aus der STL-Ansicht wechselt der Viewer dafür auf STAT), das Farbquadrat blendet das Geschoss aus, Hover hebt das Geschoss im Viewer hervor.
-- **Untere Leiste:** Ausgabeziele (nur FDM umgesetzt, die übrigen als «bald» angelegt, `config.OUTPUT_TARGETS`), Kennzahlen mit Herleitung beim Darüberfahren und die Downloads. Nach einer Änderung gilt das Ergebnis als **veraltet**: Es bleibt sichtbar, die Downloads sind gesperrt, bis neu erzeugt ist.
-- Offenes Kapitel, Tab in 03, Breite von 03, Panel offen/zu und ausgeblendete Geschosse bleiben nach dem Neuladen erhalten (`app.storage.user`).
+- **Kopfzeile:** Titel und Umschalter Setup | Matrix (Start: Matrix). *Setup* zeigt die Einstellungen als neun nummerierte Felder (1 Massstab, 2 Drucker, 3 Material, 4 Geschosse, 5 Qualität, 6 Fenster, 7 Türen, 8 Ausrichten, 9 Verbinder); jede Wahl wirkt sofort, was der Massstab nicht erlaubt, ist gesperrt. *Matrix* zeigt je Geschoss eine Karte (oberstes links) mit Stapelbalken und den Anzahlen OK · Prüfen · Nicht dr. · Weg, rechts die Total-Karte. Ein Klick auf eine Karte wählt das Geschoss: Im Viewer werden die übrigen Geschosse stark durchsichtig, das gewählte erhält einen orangen Umriss, 03 zeigt in beiden Tabs nur dessen Bauteile; ein zweiter Klick oder «× alle» hebt die Auswahl auf.
+- **Leiste links:** 01 Datei · 02 Setup (schaltet die Kopfzeile um) · 03 Regeln · 04 Ausgabe, unter dem Trennstrich 05 Prüfen (Zähler = Anzahl Prüfpunkte), unten ↺ Verlauf und der Theme-Schalter. Erledigte Kapitel tragen ein ✓.
+- **01 Datei:** Ablagefeld für die IFC-Datei, darunter die Modellkarte: Projektname, Urteil in der Ecke, Isometrie von Bauraum und Modell mit Massen, Bauteile, Geschosse und reale Grösse.
+- **03 Regeln:** Tab «IFC-Klassen» setzt die Regel je Klasse (Radio-Punkte, gruppiert nach Tragwerk, Erschliessung, Ausbau · Öffnungen, Sonstiges; gestrichelt = geerbte Regel), Tab «Bauteile» ist die Bauteiltabelle, nach IFC-Klasse gruppiert, mit Suche, «nur zu druckende» und Sammelaktionen. Ein gewähltes Bauteil erscheint in der Detail-Karte rechts neben dem Blatt und mit einem Etikett im Viewer. Die Breite jedes Tabs lässt sich am Griff rechts neben dem Blatt ziehen.
+- **04 Ausgabe:** Kacheln (gedruckte Bauteile, Geschoss-Teile, Prüfpunkte), Statuskarte (bereit, läuft, erzeugt, veraltet) mit «STL erzeugen», danach Ergebnis-Tabelle, gedruckte IFC-Klassen und Hinweise der Erzeugung. Das Blatt bleibt nach dem Erzeugen offen, die Ansicht springt auf STL.
+- **05 Prüfen:** Kacheln nach Schwere, der nächste Schritt als Karte «ALS NÄCHSTES», die übrigen Prüfpunkte als Klappzeilen (Klassen ohne Regel, defekte Geometrie, doppelte Geschosse, Ausreisser, Umgebung, Georeferenz), Kategorien ohne Befund und die Downloads (CSV, Prüfbericht, Report).
+- **Ansicht rechts:** schmale Leiste IFC · STAT · STL · ⇕ (auseinander). Im Modus Setup steht die Legende der Status-Ansicht neben dem offenen Blatt.
+- **Untere Leiste:** aktives Ziel FDM, daneben «bald» Lasercut und 3MF Farbe (`config.OUTPUT_TARGETS`), die Kennzahlen mit Herleitung beim Darüberfahren und die Downloads «Gebäude», «Geschosse», «Platziert». Nach einer Änderung gilt das Ergebnis als **veraltet**: Es bleibt sichtbar, die Downloads sind gesperrt, bis neu erzeugt ist.
+- Modus der Kopfzeile, offenes Kapitel, Tab in 03 und die Breiten beider Tabs von 03 bleiben nach dem Neuladen erhalten (`app.storage.user`).
 
 ---
 
@@ -183,14 +185,15 @@ Die Unterordner von `core/` folgen den Verarbeitungsschritten; jede `__init__.py
 | **db/** | |
 | `db/database.py` (+ `schema.sql`, `seed/`) | SQLite für Regeln, Massstab-Parameter, Druckerprofile, Material und Exportverlauf. Schema und Seed-CSVs werden beim Start eingespielt; Datenbanken mit den früheren deutschen Tabellen- und Spaltennamen werden dabei automatisch umbenannt (Daten bleiben) |
 | **ui/** | |
-| `ui/page.py` | Seite: baut Leiste, Blätter, Panel und untere Leiste auf und koordiniert sie |
+| `ui/page.py` | Seite: baut Leiste, Kopfzeile, Blätter, Detail-Karte, Ansichtsleiste und untere Leiste auf und koordiniert sie (Blatt öffnen, Geschoss wählen) |
+| `ui/header.py` | Kopfzeile: Titel, Umschalter Setup / Matrix, Setup-Felder «Schritte», Geschoss-Karten und Total-Karte |
 | `ui/state.py` | Sitzungszustand eines Browser-Tabs (Modell, Ausnahmen, Ergebnis, Lauf-Schutz), Bindeglied zu `core.pipeline` |
 | `ui/settings.py`, `state_views.py`, `run_history.py` | Einstellungen der Sitzung samt Massstab-Defaults; Kennzahlen, Matrix und Prüfbericht für die Anzeige; Verlaufseintrag eines Erzeugungslaufs |
-| `ui/sheet_file.py`, `sheet_setup.py`, `sheet_rules.py`, `sheet_elements.py`, `sheet_output.py`, `sheet_check.py`, `sheet_history.py` | Je ein Blatt: 01 Datei, 02 Setup, 03 Regeln, 03 Bauteile, 04 Ausgabe, 05 Prüfen, Verlauf |
-| `ui/panel.py`, `matrix.py`, `model_info.py` | Panel rechts: Ansichtsleiste, Matrix Geschoss × Status, Modell-Info |
-| `ui/detail.py`, `rail.py`, `bottom_bar.py` | Detailfeld eines Bauteils, Leiste links, untere Leiste |
-| `ui/viewer.py` | 3D-Viewer (`ui.scene`) mit GLB je Geschoss, Geschoss-Fokus, Aufbau-Animation |
-| `ui/viewer_js.py`, `viewer_bed.py`, `viewer_blobs.py` | JavaScript-Bausteine des Viewers (Licht, Kanten, Schnittebene); Druckbett im Viewer; GLB-Zwischenspeicher mit Route `/glb/{key}.glb` |
+| `ui/sheet_file.py`, `sheet_rules.py`, `sheet_elements.py`, `sheet_output.py`, `sheet_check.py`, `sheet_history.py` | Je ein Blatt: 01 Datei, 03 Regeln, 03 Bauteile, 04 Ausgabe, 05 Prüfen, Verlauf |
+| `ui/model_info.py`, `bed_iso.py` | Modellkarte in 01; isometrische Druckbett-Grafik mit Massketten (reine Funktion, SVG) |
+| `ui/panel.py`, `detail.py`, `rail.py`, `bottom_bar.py` | Ansichtsleiste und Legende; Detail-Karte eines Bauteils; Leiste links; untere Leiste |
+| `ui/viewer.py` | 3D-Viewer (`ui.scene`) mit GLB je Geschoss, Geschoss-Fokus und -Auswahl, Bauteil-Etikett, Aufbau-Animation |
+| `ui/viewer_js.py`, `viewer_bed.py`, `viewer_blobs.py` | JavaScript-Bausteine des Viewers (Licht, Kanten, Schnittebene, Abdunkeln, Umriss, Etikett); Druckbett im Viewer; GLB-Zwischenspeicher mit Route `/glb/{key}.glb` |
 | `ui/texts.py`, `widgets.py` | Texte, Tabellenspalten und Vorlagen; kleine Bausteine (`button`, `tag`, `set_class` …) |
 | `ui/start_model.py` | Beispielmodell beim Öffnen (einmal je Server geladen, von allen Tabs geteilt) |
 | `ui/theme.css` | Aussehen (helles und dunkles Theme) |
@@ -299,7 +302,7 @@ Die Qualität bestimmt die Voxelgrösse (Pitch) und damit Laufzeit und Detailgra
 
 Nach dem Aufteilen prüft `core/parts/overhangs.py` jedes Teil so, wie es gedruckt wird (unterste Schicht auf dem Bett). Ein Voxel ist getragen, wenn in der Schicht darunter er selbst oder ein Nachbar zum selben Teil gehört (45°-Regel). Ungetragene Stellen sind Brücken, wenn getragenes Material höchstens `BRIDGE_MAX_MM` / 2 = 5 mm entfernt ist, sonst brauchen sie Stützen. Unterschieden wird, ob die Stützen auf dem Bett stehen (leicht zu entfernen) oder auf dem Modell (z.B. unter einer Decke über Räumen).
 
-- **Meldung je Teil** ab `OVERHANG_MIN_MM2` = 25 mm²: Stützfläche, davon über dem Modell, grösste Stelle (Masse, Höhe über dem Bett, Bauteil) und ein Vorschlag: «Stützen nur vom Druckbett aus genügen» oder, wenn mindestens `OVERHANG_ON_MODEL_RATIO` = 50 % über dem Modell liegen, «Bauteil dem Teil darüber oder dem Dachteil zuordnen». Ohne Stützbedarf eine Zeile «alle Teile ohne Stützen druckbar». Die Meldungen stehen in den Warnungen und im PDF-Report, die Kennzahl «Stützfläche (cm²)» bei den Kennzahlen.
+- **Meldung je Teil** ab `OVERHANG_MIN_MM2` = 25 mm²: Stützfläche, davon über dem Modell, grösste Stelle (Masse, Höhe über dem Bett, Bauteil) und ein Vorschlag: «Stützen nur vom Druckbett aus genügen» oder, wenn mindestens `OVERHANG_ON_MODEL_RATIO` = 50 % über dem Modell liegen, «Bauteil dem Teil darüber oder dem Dachteil zuordnen». Ohne Stützbedarf eine Zeile «alle Teile ohne Stützen druckbar». Die Meldungen stehen in den Warnungen, die Kennzahl «Stützfläche (cm²)» bei den Kennzahlen; der PDF-Report zeigt die Stützfläche je Teil und die Bauteile an der grössten Stelle.
 - **Rot im Viewer:** Die Stützflächen erscheinen in der STL-Ansicht als rote Flächen im Teil (zusammengefasste Quader, im selben GLB wie das Teil, daher folgen sie dem Ausblenden und «auseinander»).
 
 ### Steckverbinder
@@ -317,7 +320,7 @@ Testrechner mit 4 Kernen und 15 GB RAM, Qualität fein, Massstab 1:200, Fenster 
 | `MFH_eBKPH_Test.ifc`: Erzeugen · Spitzenspeicher | 24 s · 1.1 GB | 14.6 s · 1.1 GB |
 | `MFH_eBKPH_Real.ifc`: Erzeugen · Spitzenspeicher | 23.3 s · 1.6 GB | 17.6 s · 1.1 GB |
 | `ARC_Modell_NEST_230328.ifc`: Erzeugen · Spitzenspeicher | 150 s · 6.3 GB | 83 s · 3.8 GB |
-| NEST: Download «STL komplett» | 10.8 GB Speicherspitze | 5 s, ohne Neuvernetzen |
+| NEST: Download «Gebäude» (früher «STL komplett») | 10.8 GB Speicherspitze | 5 s, ohne Neuvernetzen |
 | NEST: STL nach dem Export wasserdicht | nein (LV95, float32 auf 1 mm) | ja |
 
 Die Aufteilung des Codes in kleinere Module und die englischen Namen (Oktober 2026) haben die Ergebnisse nicht verändert: `scripts/baseline_metrics.py --all --compare` liefert über alle Testmodelle dieselben Werte wie davor.
@@ -345,7 +348,9 @@ Wanddicken im erzeugten Gitter (`scripts/wall_thicknesses.py`, NEST, Qualität f
 | Umgebung | Virtuelle Umgebung (venv) |
 | Versionsverwaltung | Git, GitHub |
 | Editor | VS Code |
-| Tests | pytest, 291 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
+| Tests | pytest, 304 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
+
+**Entwicklungsverlauf:** Dieses Repository ist der bereinigte Abgabestand vom 23.10.2026. Entwickelt wurde vom 21.09. bis 22.10.2026 im privaten Repository HSLU_GB_26 (125 Commits, mehrere Branches). Der Verlauf kann auf Anfrage eingesehen werden.
 
 Verwendete Bibliotheken (aus `requirements.txt`):
 
@@ -388,9 +393,10 @@ Bezug zu den Vorgaben des Leistungsnachweises:
 - Das Gefälle-Ebnen macht Decken und Dächer um die Gefällehöhe dicker (Volumen und Filament steigen leicht).
 - Die Umgebungserkennung hängt von Namen, Typnamen und Layern des Modells ab. Falsch erkannte oder übersehene Bauteile lassen sich je Bauteil übersteuern.
 - Die Fugenglättung nutzt feste Schwellen (`JOINT_*`, `ISLAND_RATIO`, `ROOF_*`, `HOST_*`, alle mit Begründung in `config.py`), die am ArchiCAD-Modell 4503 abgestimmt sind; andere Modelle können Anpassungen brauchen.
-- «STL komplett» ist ein Mehrkörper-STL aus den Geschossteilen (sie berühren sich an den Fugen); der Slicer zeigt mehrere Körper.
+- Bauteile, die ArchiCAD als `IfcBuildingElementProxy` exportiert (Regel «entfernen», sonst kämen Küchen und Schränke mit), fehlen im Druck. Ist die Wand für sie ausgespart, bleibt eine Nut: Im Modell 4503 sitzt unter jedem Fenster des 1.OG ein «Sturzelement Typ HV» (dazu «Lisenen Fenster 180»), die Fassade zeigt dort eine Nut von 0.8 × 0.8 mm. Abhilfe heute: diese Bauteile in der Bauteiltabelle per Ausnahme auf «drucken» stellen.
+- «Gebäude» ist ein Mehrkörper-STL aus den Geschossteilen (sie berühren sich an den Fugen); der Slicer zeigt mehrere Körper.
 - Doppelte Geschossnamen (zwei Gebäude mit je einem «EG») werden mit dem Gebäudenamen unterschieden, notfalls nummeriert; jedes wird ein eigenes Teil.
-- 3MF-Export und die übrigen Ausgabeziele (Resin, Lasercut, Web) sind nicht umgesetzt (in der unteren Leiste als «bald» angelegt).
+- Die Ausgabeziele Lasercut und 3MF Farbe sind nicht umgesetzt (in der unteren Leiste als «bald» angelegt).
 
 ---
 
@@ -404,7 +410,7 @@ IFC2Print/
 ├─ requirements.txt
 ├─ pyproject.toml             # Projektdaten und pytest-Konfiguration
 ├─ README.md
-├─ assets/                    # Logo und Favicon
+├─ assets/                    # Logo, Favicon und Schriften des PDF-Reports (fonts/)
 ├─ core/                      # Verarbeitung (ohne Oberfläche)
 │  ├─ pipeline.py             #   Fassade für Oberfläche, Skripte, Tests
 │  ├─ generation.py           #   Ablauf der Erzeugung
@@ -420,11 +426,11 @@ IFC2Print/
 │  ├─ database.py
 │  ├─ schema.sql
 │  └─ seed/                   # regeln.csv, massstaebe.csv, profile.csv, material.csv
-├─ ui/                        # NiceGUI-Oberfläche: page.py, ein Blatt je sheet_*.py, panel, viewer …
+├─ ui/                        # NiceGUI-Oberfläche: page.py, header.py, ein Blatt je sheet_*.py, viewer …
 ├─ scripts/                   # generate_stl, baseline_metrics, wall_thicknesses, diagnostics
 ├─ tests/                     # pytest (Architektur, core, db, Oberfläche, Skripte)
 ├─ testdaten/                 # IFC-Testmodelle
-├─ docs/                      # Designbriefing ZP1, Massstab-Regelwerk
+├─ docs/                      # Massstab-Regelwerk
 └─ output/                    # erzeugte Dateien (nicht im Repository)
 ```
 
@@ -439,4 +445,3 @@ Die Dokumente in `docs/` beschreiben frühere Arbeitsstände und verwenden teilw
 | Dokument | Inhalt |
 |---|---|
 | `docs/MASSSTAB_REGELWERK.md` | Konzept der Regelwerke je Massstab |
-| `docs/IFC2Print_ZP1_Designbriefing_v2.md` | Designbriefing zur Zwischenpräsentation 1 (ZP1) |
