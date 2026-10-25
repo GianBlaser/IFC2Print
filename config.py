@@ -71,6 +71,7 @@ DECIMATION_RATIO = 0.4       # Ziel-Anteil der Dreiecke (None = keine Dezimierun
 DECIMATION_MAX_VOLUME_CHANGE = 0.02   # dezimiertes Netz nur übernehmen, wenn sich das Volumen höchstens um 2 %
                                       # ändert – sonst bleibt das volle Netz (Masshaltigkeit vor Dateigrösse)
 VIEWER_MAX_FACES = 200_000   # Dreiecksbudget nur der Vorschau im Browser (Festlegung); die STL bleibt vollständig
+PANGO_DLL_DIR = r"C:\msys64\mingw64\bin"   # Pango für WeasyPrint (PDF-Report) unter Windows, aus MSYS2 (README)
 # Lose Krumen (Modell-mm³): kleinere Stücke eines Teils, die nur über Kanten/Ecken hängen, und ebenso
 # kleine eingeschlossene Hohlräume entfallen vor dem Vernetzen (core/parts/cleanup.without_sliver); nach dem
 # Vernetzen ebenso kleine geschlossene Schalen (core/voxels/meshing.without_specks). 0.5 mm³ ≈ 8 Voxel bei 0.4 mm.

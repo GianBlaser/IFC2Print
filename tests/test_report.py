@@ -1,8 +1,13 @@
-"""Tests für den Report."""
+"""Tests für den Report: PDF (WeasyPrint, übersprungen ohne Pango) und CSV."""
 
 import pandas as pd
+import pytest
 
+from core.output import report
 from core.output.report import elements_csv, report_pdf
+from core.output.report_data import build_report_data
+
+needs_weasyprint = pytest.mark.skipif(not report.available(), reason="WeasyPrint/Pango fehlt")
 
 
 def _example_df():
@@ -12,25 +17,37 @@ def _example_df():
         "status": ["druckbar", "kritisch", "druckbar"],
         "thickness_model_mm": [1.2, 0.9, 1.5],
         "filament_g": [10.0, 5.0, 8.0],
+        "name": ["Wand", "Stütze", "Decke"],
+        "action": ["behalten", "verdicken", "behalten"],
+        "rule": ["IfcWall", "IfcColumn", ""],
+        "is_printed": [True, True, False],
     })
 
 
-def test_pdf_starts_with_magic_bytes():
-    pdf = report_pdf(_example_df(), {"Schema": "IFC2x3", "Massstab": "1:200"},
-                     {"EG": 15.0, "OG": 8.0})
+@needs_weasyprint
+def test_pdf_starts_with_magic_bytes(report_context):
+    pdf = report_pdf(build_report_data(_example_df(), report_context, None, []))
     assert pdf[:4] == b"%PDF"
     assert len(pdf) > 1000
 
 
-def test_pdf_without_data():
-    df = pd.DataFrame({"status": pd.Series([], dtype=str), "thickness_model_mm": pd.Series([], dtype=float)})
-    pdf = report_pdf(df, {}, {})
-    assert pdf[:4] == b"%PDF"
+@needs_weasyprint
+def test_pdf_without_data(report_context):
+    df = _example_df().iloc[0:0]
+    assert report_pdf(build_report_data(df, report_context, None, []))[:4] == b"%PDF"
 
 
-def test_pdf_without_thicknesses():
+@needs_weasyprint
+def test_pdf_without_thicknesses(report_context):
     df = _example_df().assign(thickness_model_mm=float("nan"))
-    assert report_pdf(df, {"Schema": "IFC4"}, {"EG": 1.0})[:4] == b"%PDF"
+    assert report_pdf(build_report_data(df, report_context, None, []))[:4] == b"%PDF"
+
+
+@needs_weasyprint
+def test_pdf_escapes_project_name(report_context):
+    """Projektname mit Anführungszeichen und Spitzklammern landet im Kopfband (CSS) und im Text (HTML)."""
+    report_context["ifc_meta"]["projekt"] = 'Haus "A" </style><b>'
+    assert report_pdf(build_report_data(_example_df(), report_context, None, []))[:4] == b"%PDF"
 
 
 def test_csv_contains_header():

@@ -29,9 +29,10 @@ from core.voxels import alignment
 from core.voxels.shell import grid_limit      # hier nachgeschlagen: Tests ersetzen ``pipeline.grid_limit``
 
 # Weitergereicht für Oberfläche, Skripte und Tests (``pipeline.<name>``)
-from core.analysis.check_points import check_points, checklist, georeference_gaps
+from core.analysis.check_points import check_points, checklist, for_print, georeference_gaps
 from core.generation import generate, scale_parameters
 from core.output.model_info import model_overview
+from core.output.report_data import report_context
 from core.output.result import export_watertight, filename, Result
 from core.output.view_data import (element_at_point, element_boxes, frame, ifc_preview, SELECTION_OFFSET_MM,
                                    selection_preview, status_preview, storey_order)
@@ -41,8 +42,8 @@ from core.voxels.elements import package_min_thickness
 # Die Fassade: eigene Funktionen und alles, was weitergereicht wird (``pipeline.<name>``)
 __all__ = [
     "analyse", "assign_packages", "alignment_angle", "resolve_quality", "elements_csv",
-    "check_points", "checklist", "georeference_gaps", "generate", "scale_parameters", "package_min_thickness",
-    "model_overview", "Result", "export_watertight", "filename", "roof_beam", "roof_part", "roof_zones",
+    "check_points", "checklist", "for_print", "georeference_gaps", "generate", "scale_parameters",
+    "package_min_thickness", "model_overview", "report_context", "Result", "export_watertight", "filename", "roof_beam", "roof_part", "roof_zones",
     "SELECTION_OFFSET_MM", "element_at_point", "element_boxes", "frame", "ifc_preview", "selection_preview",
     "status_preview", "storey_order",
 ]

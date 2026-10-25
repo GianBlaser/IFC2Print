@@ -58,6 +58,17 @@ Virtuelle Umgebung anlegen und Abhängigkeiten installieren:
 | Windows | `python -m venv .venv`<br>`.venv\Scripts\activate`<br>`pip install -r requirements.txt` |
 | macOS / Linux | `python3 -m venv .venv`<br>`source .venv/bin/activate`<br>`pip install -r requirements.txt` |
 
+**PDF-Report (WeasyPrint):** WeasyPrint setzt den Report aus einem HTML-Template und braucht dafür die Textbibliothek Pango.
+Unter macOS (`brew install pango`) und Linux (Paket `libpango-1.0-0`) genügt die Paketverwaltung. Unter Windows kommt Pango aus MSYS2:
+
+1. MSYS2 installieren: `winget install MSYS2.MSYS2` (oder Installer von https://www.msys2.org), Zielordner `C:\msys64`.
+2. In der Konsole «MSYS2 MINGW64»: `pacman -S mingw-w64-x86_64-pango`
+3. Fertig: IFC2Print findet `C:\msys64\mingw64\bin` selbst (`PANGO_DLL_DIR` in `config.py`). Liegt MSYS2 anderswo, die
+   Umgebungsvariable `WEASYPRINT_DLL_DIRECTORIES` auf den `mingw64\bin`-Ordner setzen.
+
+Fehlt Pango, meldet der Download «PDF-Report braucht WeasyPrint – siehe README»; STL, ZIP und CSV funktionieren weiter.
+Die Schriften des Reports (Instrument Sans, IBM Plex Mono, OFL-Lizenz) liegen in `assets/fonts/`.
+
 Oberfläche starten:
 
 ```bash
@@ -162,7 +173,9 @@ Die Unterordner von `core/` folgen den Verarbeitungsschritten; jede `__init__.py
 | `geometry.py` | Zapfen und Taschen als Kegelstümpfe, per Boolean in die Teile |
 | **core/output/** | Ergebnis und Anzeige |
 | `result.py` | `Result`: Teile, Kennzahlen, Downloads; Dichtheit am exportierten STL prüfen |
-| `report.py` | PDF-Report (Matplotlib) und CSV der Bauteiltabelle |
+| `report.py` | PDF-Report (Jinja2-Template `templates/report.html.j2` + `report.css`, gesetzt mit WeasyPrint) und CSV der Bauteiltabelle |
+| `report_data.py` | Alle Werte des PDF-Reports fertig formatiert: Urteil, Druckteile, Regelwerk, Druckbarkeit je Klasse, Prüfpunkte, Anhang |
+| `report_image.py` | Modellbild des PDF-Reports: Druckteile isometrisch in Geschossfarben (Matplotlib mplot3d) |
 | `estimate.py` | Filament, Kosten, Druckzeit (Schätzung) mit Rechenweg |
 | `preview.py` | GLB je Geschoss für den Viewer, reduzierte STL-Vorschau |
 | `view_data.py` | Vorschauen je Ansicht, Kamerarahmen, Bauteil unter dem Mauszeiger |
@@ -345,7 +358,8 @@ Verwendete Bibliotheken (aus `requirements.txt`):
 | scikit-image | Marching Cubes |
 | trimesh, manifold3d | Meshes, STL- und GLB-Export, Booleans der Steckverbinder |
 | fast-simplification | Quadric-Dezimierung (von trimesh genutzt) |
-| matplotlib | PDF-Report |
+| matplotlib | Modellbild im PDF-Report |
+| jinja2, weasyprint | PDF-Report: HTML-Template und Satz als PDF (Seitenumbruch, wiederholter Tabellenkopf) |
 | psutil | Arbeitsspeicher für die Speicherbremse |
 | nicegui | Oberfläche inkl. 3D-Viewer (`ui.scene`) |
 | fastapi | Route für die GLB-Dateien des Viewers (kommt mit nicegui) |
@@ -357,7 +371,7 @@ Bezug zu den Vorgaben des Leistungsnachweises:
 |---|---|
 | IfcOpenShell | IFC-Import und Triangulierung (`core/ifc/`) |
 | Pandas | Bauteiltabelle, Regelanwendung, Druckbarkeitsprüfung |
-| Matplotlib | PDF-Report mit Diagrammen (`core/output/report.py`) |
+| Matplotlib | Modellbild (isometrische 3D-Ansicht der Druckteile) im PDF-Report (`core/output/report_image.py`) |
 | SQLite | Regeln, Massstab-Parameter, Druckerprofile, Material, Exportverlauf (`db/`) |
 | NiceGUI | Oberfläche und 3D-Viewer (`ui/`) |
 

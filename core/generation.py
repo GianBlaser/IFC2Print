@@ -7,6 +7,7 @@ Eingabe: IFC-Modell, Bauteiltabelle, Massstab, Voxelgrösse, Druckerprofil, Mate
 Ausgabe: ``Result`` (core/output/result.py) mit Teilen, Warnungen, Kennzahlen und Downloads.
 """
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -15,7 +16,7 @@ import pandas as pd
 import trimesh
 
 from config import CLEARANCE_MM
-from core.analysis.check_points import checklist
+from core.analysis.check_points import check_points, for_print, run_points, sentence
 from core.analysis.ruleset import ScaleParameters
 from core.connectors.geometry import apply_connectors
 from core.connectors.planning import plan_connectors
@@ -85,19 +86,23 @@ def generate(ifc: IfcModel, df: pd.DataFrame, *, scale: int, pitch_mm: float,
     parts, partition = _split_into_parts(run, df, grid)
     report_progress("Überhänge prüfen", 1.0)
     supports = overhangs(partition.labels, partition.mesh_names, grid.pitch, grid.origin)
-    warnings = (checklist(ifc, df) + grid.warnings + warnings + list(partition.warnings) + _element_notes(prep.elements)
-                + _overhang_notes(run, df, supports))
+    analysis_points, element_points = for_print(check_points(ifc, df)), _element_points(df, prep.elements)
+    overhang_notes, support_elements = _overhang_notes(run, df, supports)
+    warnings = ([sentence(p) for p in analysis_points] + grid.warnings + warnings + list(partition.warnings)
+                + [sentence(p) for p in element_points] + overhang_notes)
     report_progress("Fertig", 1.0)
 
     leaky = [name for name, m in parts.items() if not export_watertight(m)]
     if leaky:
         warnings.append("Nach dem STL-Export nicht wasserdicht: " + ", ".join(leaky) + " – im Slicer prüfen.")
-    plug, connector_warnings = _connect_parts(run, grid, partition, parts)
+    plug, connector_warnings, connector_figures = _connect_parts(run, grid, partition, parts)
     figures = _estimate(run, grid, parts)
     marks = {o.name: m for o in supports if (m := mark(o, grid.pitch, grid.origin)) is not None}
     return Result(voxel_grid=grid, parts=parts, warnings=warnings + connector_warnings,
                   metrics=_metrics(run, df, prep, parts, opening_count, figures, supports),
-                  watertight=not leaky, plug_pieces=plug, overhang_marks=marks, **figures)
+                  watertight=not leaky, plug_pieces=plug, overhang_marks=marks, **figures,
+                  check_points=analysis_points + element_points, overhangs=supports,
+                  support_elements=support_elements, settings=_settings(run), **connector_figures)
 
 
 def scale_parameters(scale: int) -> ScaleParameters:
@@ -147,56 +152,67 @@ def _split_into_parts(run: _Run, df: pd.DataFrame,
     return parts, partition
 
 
-def _element_notes(elements: list[BuildingElement]) -> list[str]:
-    """Hinweise zu Öffnungen ohne Füller und zu eben gemachten Decken (Gefälle)."""
-    notes = []
-    if cut_count := sum(len(b.voids) for b in elements):
-        notes.append(f"{cut_count} Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).")
-    if flattened := sum(b.flatten for b in elements):
-        notes.append(f"{flattened} Decken/Dächer mit Gefälle eben gemacht (tiefste bis höchste Stelle gefüllt).")
-    return notes
+def _element_points(df: pd.DataFrame, elements: list[BuildingElement]) -> list[dict]:
+    """Prüfpunkte zu Öffnungen ohne Füller und zu eben gemachten Decken (Gefälle), je IFC-Klasse gezählt."""
+    ifc_class = dict(zip(df["guid"], df["ifc_class"]))
+    cut, flattened = Counter(), Counter()
+    for b in elements:
+        cut[ifc_class.get(b.guid, "ohne Klasse")] += len(b.voids)
+        flattened[ifc_class.get(b.guid, "ohne Klasse")] += b.flatten
+    return run_points(+cut, +flattened)                       # «+» lässt die Klassen ohne Fall weg
 
 
-def _overhang_notes(run: _Run, df: pd.DataFrame, supports: list[Overhang]) -> list[str]:
-    """Je Teil mit Stützbedarf eine Meldung samt Bauteil an der grössten Stelle (core/parts/overhangs.py)."""
+def _overhang_notes(run: _Run, df: pd.DataFrame, supports: list[Overhang]) -> tuple[list[str], dict[str, str]]:
+    """Je Teil mit Stützbedarf eine Meldung samt Bauteil an der grössten Stelle (core/parts/overhangs.py);
+    (Meldungen, Teil → Name dieses Bauteils)."""
     relevant = [o for o in supports if o.relevant]
     if not relevant:
-        return [text] if (text := summary(supports)) else []
+        return ([text] if (text := summary(supports)) else []), {}
     boxes = element_boxes(run.ifc, run.scale, run.angle)      # nur bei Stützbedarf: kostet bei grossen Modellen ~1 s
-    notes = []
+    notes, elements = [], {}
     for o in relevant:
         guid = element_at_point(boxes, df, None, o.center, tolerance_mm=run.pitch_mm)
         row = df[df["guid"] == guid].iloc[0] if guid else None
         notes.append(message(o, None if row is None else f"{row['ifc_class']} «{row['name']}»"))
-    return notes
+        if row is not None:
+            elements[o.name] = row["name"] or row["ifc_class"]
+    return notes, elements
 
 
-def _connect_parts(run: _Run, grid: VoxelGrid, partition: partitioning.Partition,
-                   parts: dict[str, trimesh.Trimesh]) -> tuple[dict[str, trimesh.Trimesh] | None, list[str]]:
-    """Steckverbinder planen und einbauen; (Teile mit Steckverbindern oder None, Warnungen)."""
+def _connect_parts(run: _Run, grid: VoxelGrid, partition: partitioning.Partition, parts: dict[str, trimesh.Trimesh]
+                   ) -> tuple[dict[str, trimesh.Trimesh] | None, list[str], dict]:
+    """Steckverbinder planen und einbauen; (Teile mit Steckverbindern oder None, Warnungen,
+    Anzahlen als Felder von ``Result``)."""
     if not run.connectors:
-        return None, []
+        return None, [], {}
     if not run.parameter.connectors_allowed:
-        return None, [f"Steckverbinder bei {run.parameter.ruleset_name} nicht möglich (Wände zu dünn für die Zapfen)."]
+        return None, [f"Steckverbinder bei {run.parameter.ruleset_name} nicht möglich (Wände zu dünn für die Zapfen)."], {}
     run.report("Steckverbinder", 1.0)
     clearance = run.profile.get("clearance_mm", CLEARANCE_MM)   # Passungsspiel aus dem Druckerprofil, sonst config.py
     plan, warn_plan = plan_connectors(grid, partition, clearance)
     plug, warn_geo = apply_connectors(parts, partition.mesh_names, plan, clearance)
     joints = len({(v.bottom, v.top) for v in plan})
-    return plug, warn_plan + warn_geo + [f"Steckverbinder: {len(plan)} an {joints} Fugen (Spiel {clearance:.2f} mm)."]
+    figures = dict(connector_count=len(plan), joint_count=joints, clearance_mm=clearance,
+                   pegs_per_part=dict(Counter(partition.mesh_names[v.bottom] for v in plan)))   # Zapfen am Teil unten
+    return (plug, warn_plan + warn_geo + [f"Steckverbinder: {len(plan)} an {joints} Fugen (Spiel {clearance:.2f} mm)."],
+            figures)
+
+
+def _settings(run: _Run) -> dict:
+    """Einstellungen des Laufs für den PDF-Report."""
+    return dict(scale=run.scale, pitch_mm=run.pitch_mm, angle=run.angle, windows=run.windows, doors=run.doors,
+                profile=dict(run.profile), material=dict(run.material))
 
 
 def _estimate(run: _Run, grid: VoxelGrid, parts: dict[str, trimesh.Trimesh]) -> dict:
     """Volumen, Filament, Kosten und Druckzeit der Teile – als Felder von ``Result`` (core/output/estimate.py)."""
-    part_volumes = {name: m.volume / 1000 for name, m in parts.items()}          # mm³ → cm³
-    volume_cm3 = sum(part_volumes.values())
+    volume_cm3 = sum(m.volume for m in parts.values()) / 1000                   # mm³ → cm³
     density, price = run.material["density_g_cm3"], run.material["price_chf_kg"]
     grams = estimate.filament_grams(volume_cm3, density)
     height_mm = grid.matrix.shape[2] * run.pitch_mm
     layer_height = run.profile["layer_height_mm"]
     return dict(volume_cm3=volume_cm3, grams=grams, cost_chf=estimate.cost_chf(grams, price),
                 time_h=estimate.print_time_hours(volume_cm3, height_mm, layer_height),
-                filament_per_storey={n: estimate.filament_grams(v, density) for n, v in part_volumes.items()},
                 height_mm=height_mm, layer_height_mm=layer_height, density_g_cm3=density, price_chf_kg=price)
 
 

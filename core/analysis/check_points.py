@@ -15,12 +15,21 @@ from core.ifc.schema import class_chain
 # Karte im Blatt 05 Prüfen, in der ein Prüfpunkt erscheint (Schlüssel = ``kind``)
 _CATEGORY = {"keine": "regeln", "geerbt": "regeln", "aggregate": "regeln", "storeys": "storeys",
              "ausreisser": "ausreisser", "umgebung": "umgebung", "geometry": "geometry", "versatz": "georeferenz",
-             "georeferenz": "georeferenz"}
+             "georeferenz": "georeferenz", "oeffnungen": "lauf", "gefaelle": "lauf"}   # lauf: nur im Ergebnis
+
+# Was tun je ``kind`` – Spalte «Was tun» im PDF-Report
+_FIX = {"keine": "Regeln im Blatt 03 ergänzen", "geometry": "IFC-Geometrie im Autorenwerkzeug prüfen",
+        "geerbt": "Keine Aktion; Regel bei Bedarf eigens setzen", "aggregate": "Keine Aktion",
+        "storeys": "Keine Aktion", "ausreisser": "Im Blatt 03 je Bauteil übersteuern",
+        "umgebung": "Im Blatt 03 je Bauteil übersteuern", "versatz": "Keine Aktion; Lage bleibt im IFC",
+        "oeffnungen": "Keine Aktion", "gefaelle": "Keine Aktion"}
 
 _SENTENCE_TEMPLATE = {"keine": "Ohne Regel, nicht gedruckt: {e} – im Regelblatt einstellbar.",
                       "geerbt": "Ohne eigene Regel, von der Oberklasse übernommen: {e}.",
                       "aggregate": "Teile folgen der Regel ihres Ganzen: {e}.",
-                      "storeys": "Doppelte Geschossnamen unterschieden: {e}."}
+                      "storeys": "Doppelte Geschossnamen unterschieden: {e}.",
+                      "oeffnungen": "{n} Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).",
+                      "gefaelle": "{n} Decken/Dächer mit Gefälle eben gemacht (tiefste bis höchste Stelle gefüllt)."}
 
 # Prüfpunkte zur Herkunft der Regel: (kind, Titel, Erklärung)
 _RULE_KINDS = (
@@ -38,7 +47,8 @@ def check_points(ifc: IfcModel, df: pd.DataFrame) -> list[dict]:
 
     Je Punkt: ``kind`` (keine | geerbt | aggregate | storeys | ausreisser | umgebung | geometry | versatz | georeferenz),
     ``category`` (Karte im Blatt 05 Prüfen: regeln | storeys | ausreisser | umgebung | geometry | georeferenz),
-    ``title``, ``explanation``, ``entries`` [(Text, Anzahl oder None)] und ``target`` (Blatt zum Beheben oder None).
+    ``title``, ``explanation``, ``entries`` [(Text, Anzahl oder None)], ``target`` (Blatt zum Beheben oder None)
+    und ``fix`` (Was tun, für den PDF-Report).
     """
     points = (_rule_points(ifc, df) + _storey_name_points(ifc) + _outlier_points(df) + _surroundings_points(df)
               + _geometry_points(df) + _offset_points(ifc) + _georeference_points(ifc))
@@ -49,7 +59,23 @@ def check_points(ifc: IfcModel, df: pd.DataFrame) -> list[dict]:
 
 def _point(kind: str, title: str, explanation: str, entries: list, target: str | None = None) -> dict:
     """Ein Prüfpunkt als Dictionary (``category`` setzt ``check_points`` zuletzt)."""
-    return dict(kind=kind, title=title, explanation=explanation, entries=entries, target=target)
+    return dict(kind=kind, title=title, explanation=explanation, entries=entries, target=target,
+                fix=_FIX.get(kind, "Keine Aktion"))
+
+
+def run_points(cut: dict[str, int], flattened: dict[str, int]) -> list[dict]:
+    """Prüfpunkte aus dem Erzeugungslauf, je IFC-Klasse gezählt: Öffnungen ohne Fenster oder Tür, eben gemachte Decken."""
+    points = []
+    if cut:
+        points.append(_point("oeffnungen", "Öffnungen ohne Fenster oder Tür ausgeschnitten",
+                             "Treppenaugen, Schächte und Durchgänge bleiben offen wie im IFC.", sorted(cut.items())))
+    if flattened:
+        points.append(_point("gefaelle", "Decken mit Gefälle eben gemacht",
+                             "Tiefste bis höchste Stelle gefüllt, damit die Decke ohne Treppenstufen druckt.",
+                             sorted(flattened.items())))
+    for p in points:
+        p["category"] = _CATEGORY[p["kind"]]
+    return points
 
 
 def _rule_source(z: tuple, schema_id: str) -> str:
@@ -158,12 +184,20 @@ def georeference_gaps(ifc: IfcModel) -> list[str]:
     return missing_info
 
 
+def for_print(points: list[dict]) -> list[dict]:
+    """Die Prüfpunkte, die den Druck betreffen: ohne fehlende Georeferenz (der Versatz zählt)."""
+    return [p for p in points if p["category"] != "georeferenz" or p["kind"] == "versatz"]
+
+
+def sentence(point: dict) -> str:
+    """Ein Prüfpunkt als Satz (Warnungen des Ergebnisses)."""
+    e = ", ".join(t if n is None else f"{t} ({n})" for t, n in point["entries"])
+    n = sum(1 if c is None else c for _, c in point["entries"])
+    if point["kind"] in _SENTENCE_TEMPLATE:
+        return _SENTENCE_TEMPLATE[point["kind"]].format(e=e, n=n)
+    return f"{point['title']}. {point['explanation']}"
+
+
 def checklist(ifc: IfcModel, df: pd.DataFrame) -> list[str]:
-    """Prüfpunkte als Sätze (Warnungen des Ergebnisses, PDF)."""
-    sentences = []
-    for p in check_points(ifc, df):
-        if p["category"] == "georeferenz" and p["kind"] != "versatz":   # für den Druck ohne Belang
-            continue
-        e = ", ".join(t if n is None else f"{t} ({n})" for t, n in p["entries"])
-        sentences.append(_SENTENCE_TEMPLATE[p["kind"]].format(e=e) if p["kind"] in _SENTENCE_TEMPLATE else f"{p['title']}. {p['explanation']}")
-    return sentences
+    """Prüfpunkte als Sätze (Warnungen des Ergebnisses)."""
+    return [sentence(p) for p in for_print(check_points(ifc, df))]

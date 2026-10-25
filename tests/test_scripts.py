@@ -3,6 +3,8 @@
 import importlib.util
 from pathlib import Path
 
+from core.output import report
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -20,4 +22,5 @@ def test_generate_stl_as_in_readme(tmp_path, monkeypatch):
     _script("generate_stl").main([str(PROJECT_ROOT / "testdaten" / "MFH_eBKPH_Test.ifc"), "--scale", "1:200",
                                   "--quality", "entwurf", "--output", str(output)])
     assert (output / "MFH_eBKPH_Test_geschosse.zip").stat().st_size > 0
-    assert (output / "MFH_eBKPH_Test_report.pdf").read_bytes().startswith(b"%PDF")
+    if report.available():                                   # ohne WeasyPrint/Pango nur die STL
+        assert (output / "MFH_eBKPH_Test_report.pdf").read_bytes().startswith(b"%PDF")

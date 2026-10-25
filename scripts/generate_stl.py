@@ -19,6 +19,7 @@ from config import SCALES, QUALITIES
 from core import pipeline
 from core.analysis.ruleset import Ruleset, ScaleParameters
 from core.ifc.model import IfcModel
+from core.output.report import ReportUnavailable
 from db.database import DEFAULT_PATH, Database
 
 
@@ -53,7 +54,12 @@ def main(argv: list[str] | None = None) -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     base_name = args.ifc.stem
     (args.output / f"{base_name}_geschosse.zip").write_bytes(res.stl_zip(base_name))
-    (args.output / f"{base_name}_report.pdf").write_bytes(res.report_pdf(df))
+    context = pipeline.report_context(ifc, df, args.ifc.name, scale=scale, ruleset_name=args.scale,
+                                      profile=profile, material=material)
+    try:
+        (args.output / f"{base_name}_report.pdf").write_bytes(res.report_pdf(df, context))
+    except ReportUnavailable as error:            # WeasyPrint fehlt: die STL sind trotzdem da
+        print(f"Kein PDF-Report: {error}")
     print(f"Geschrieben nach {args.output}/")
 
 

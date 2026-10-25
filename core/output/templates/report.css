@@ -1,0 +1,156 @@
+/* PDF-Report IFC2Print, Variante 2a «Datenblatt». A4 hoch = 794 × 1123 CSS-px; alle Masse beziehen sich darauf.
+   Farben und Schriften wie ui/theme.css; Mischfarben rechnet core/output/report_data.py vor (kein color-mix). */
+
+@font-face { font-family: "Instrument Sans"; font-weight: 400; src: url("../../../assets/fonts/InstrumentSans-Regular.ttf"); }
+@font-face { font-family: "Instrument Sans"; font-weight: 500; src: url("../../../assets/fonts/InstrumentSans-Medium.ttf"); }
+@font-face { font-family: "Instrument Sans"; font-weight: 600; src: url("../../../assets/fonts/InstrumentSans-SemiBold.ttf"); }
+@font-face { font-family: "Instrument Sans"; font-weight: 700; src: url("../../../assets/fonts/InstrumentSans-Bold.ttf"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("../../../assets/fonts/IBMPlexMono-Regular.ttf"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("../../../assets/fonts/IBMPlexMono-Medium.ttf"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url("../../../assets/fonts/IBMPlexMono-SemiBold.ttf"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 700; src: url("../../../assets/fonts/IBMPlexMono-Bold.ttf"); }
+
+/* Seite 2 ff.: dunkles Band oben aus den drei Randfeldern (Logo, Projekt · Massstab, Seitenzahl).
+   Kein Seitenhintergrund: background-size wirkt auf @page in WeasyPrint nicht. */
+@page {
+  size: A4;
+  margin: 46px 0 40px;
+  @top-left { content: "IFC2Print"; width: 30%; padding-left: 40px; background: #17191C; color: #EDECE8;
+              font: 700 14px/1 "Instrument Sans"; }
+  @top-center { width: 40%; background: #17191C; color: #A0A6B0; text-align: center;
+                font: 500 11px/1 "IBM Plex Mono"; }   /* Inhalt im Template (Projekt · Massstab) */
+  @top-right { content: counter(page) " / " counter(pages); width: 30%; padding-right: 40px; background: #17191C;
+               color: #EDECE8; text-align: right; font: 500 11px/1 "IBM Plex Mono"; }
+}
+@page :first {
+  margin: 0;
+  @top-left { content: none; }
+  @top-center { content: none; }
+  @top-right { content: none; }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font: 400 12px/1.3 "Instrument Sans"; color: #17191C; }
+b { font-weight: inherit; }
+i { display: block; }
+h1, h2 { margin: 0; font-family: "Instrument Sans"; font-weight: 600; }
+.kicker { display: block; font: 600 11px/1 "IBM Plex Mono"; letter-spacing: .1em; color: #C94A12; }
+.muted { color: #5E6269; }
+.faint { color: #8A8E95; }
+
+/* ---------- Seite 1 · Übergabe ---------- */
+.cover { display: grid; grid-template-columns: 236px 1fr; height: 1122px; break-after: page; }
+
+.sidebar { position: relative; background: #17191C; color: #EDECE8; padding: 40px 26px; }
+.sidebar > * + * { margin-top: 26px; }
+.brand { display: flex; align-items: center; }
+.brand svg { margin-right: 10px; }
+.brand b { font: 700 17px/1 "Instrument Sans"; }
+.project .label { display: block; font: 600 10px/1 "IBM Plex Mono"; letter-spacing: .08em; color: #FF6B2C; }
+.project-name { display: block; margin-top: 6px; font: 600 18px/1.2 "Instrument Sans"; }
+.file { display: block; margin-top: 6px; font: 400 11px/1.4 "IBM Plex Mono"; color: #A0A6B0; word-break: break-all; }
+.spec { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid #2E333C; }
+.spec-text { flex: 1; }
+.spec-key { display: block; font: 500 9.5px/1 "IBM Plex Mono"; letter-spacing: .08em; color: #8A8E95; }
+.spec-value { display: block; margin-top: 4px; font: 500 12.5px/1.25 "IBM Plex Mono"; }
+.nowrap { white-space: nowrap; }
+.spec-icon { margin-left: 10px; }
+.spec-icon svg { display: block; }
+.generated { position: absolute; left: 26px; bottom: 40px; font: 400 11px/1.4 "IBM Plex Mono"; color: #8A8E95; }
+.pages { color: inherit; text-decoration: none; }
+.pages::after { content: target-counter(attr(href), page); }
+
+.main { padding: 40px 36px; }
+.main h1 { margin-top: 8px; font-size: 30px; line-height: 1.1; letter-spacing: -.025em; }
+.model { display: block; width: 100%; height: 340px; margin-top: 20px; border-radius: 14px; background: #F6F4F0;
+         object-fit: contain; }
+.model-empty { background: repeating-linear-gradient(135deg, #F6F4F0 0 10px, #EFECE6 10px 11px);
+               display: flex; align-items: center; justify-content: center; }
+.model-empty span { font: 500 12px/1.4 "IBM Plex Mono"; color: #8A8E95; background: #FFFFFF; padding: 6px 10px;
+                    border-radius: 6px; text-align: center; }
+
+.verdict { margin-top: 20px; border-top: 1.5px solid #17191C; }
+.verdict-row { display: grid; grid-template-columns: 26px 1fr auto; column-gap: 12px; align-items: center;
+               padding: 9px 0; border-bottom: 1px solid #ECE8E0; }
+.mark { display: block; width: 22px; height: 22px; border-radius: 50%; text-align: center;
+        font: 700 12px/22px "IBM Plex Mono"; }
+.mark svg, .checks-none svg { display: block; }
+.checks-none svg { display: inline; margin-right: 6px; }
+.mark-ok { background: rgba(14, 143, 126, .10); color: #0E8F7E; }
+.mark-warn { background: rgba(180, 105, 14, .12); color: #B4690E; }
+.mark-err { background: rgba(208, 59, 64, .10); color: #D03B40; }
+.verdict-title { display: block; font: 600 13.5px/1.2 "Instrument Sans"; }
+.verdict-sub { display: block; margin-top: 3px; font: 400 11.5px/1.3 "Instrument Sans"; color: #5E6269; }
+.verdict-value { font: 600 15px/1 "IBM Plex Mono"; white-space: nowrap; }
+
+.parts { margin-top: 20px; }
+.parts-head, .parts-row { display: grid; grid-template-columns: 70px 1fr 80px 70px; column-gap: 8px; }
+.parts-head { padding-bottom: 8px; font: 600 9.5px/1.2 "IBM Plex Mono"; letter-spacing: .06em; color: #8A8E95; }
+.parts-row { align-items: center; padding: 7px 0; border-top: 1px solid #ECE8E0; font: 400 12px/1 "IBM Plex Mono"; }
+.part-name { display: flex; align-items: center; font-weight: 600; }
+.part-name i { width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; }
+.support { color: #B4690E; }
+
+/* ---------- Seite 2 · Regelwerk ---------- */
+.rules, .appendix { padding: 30px 40px 0; }
+.rules h2, .appendix h2 { margin-top: 8px; font-size: 24px; line-height: 1.1; letter-spacing: -.02em; }
+.decision-bar { display: flex; height: 14px; margin-top: 16px; }
+.decision-bar i { height: 14px; border-right: 1.5px solid #FFFFFF; }
+.decision-legend { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); column-gap: 8px; margin-top: 10px; }
+.decision-legend b { display: block; font: 600 16px/1 "IBM Plex Mono"; }
+.decision-legend span { display: flex; align-items: center; margin-top: 4px; font: 500 11px/1.2 "Instrument Sans"; color: #5E6269; }
+.decision-legend span i { width: 8px; height: 8px; margin-right: 5px; flex-shrink: 0; }
+
+.block-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 24px;
+              font: 600 10px/1 "IBM Plex Mono"; letter-spacing: .08em; color: #8A8E95; }
+.legend { display: flex; color: #5E6269; }
+.legend span { display: flex; align-items: center; margin-left: 12px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+
+.classes { margin-top: 8px; }
+.class-row { display: grid; grid-template-columns: 180px 1fr 44px 140px; column-gap: 12px; align-items: center;
+             padding: 5px 0; border-top: 1px solid #ECE8E0; }
+.class-name { font: 500 12px/1.2 "IBM Plex Mono"; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.class-bar { display: flex; height: 16px; border-radius: 4px; overflow: hidden; background: #F6F4F0; }
+.class-bar i { height: 16px; }
+.class-count { font: 600 12px/1 "IBM Plex Mono"; text-align: right; }
+.class-action { font: 500 11.5px/1.25 "IBM Plex Mono"; }   /* zwei Aktionen brechen um */
+.class-more { padding: 7px 0 0; border-top: 1px solid #ECE8E0; font: 500 11px/1.2 "IBM Plex Mono"; color: #8A8E95; }
+
+.checks-head { margin-bottom: 10px; }
+.check-group { border-radius: 10px; overflow: hidden; break-inside: avoid; }
+.check-group + .check-group { margin-top: 12px; }
+.check-group-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px;
+                    border-radius: 10px 10px 0 0; }
+.check-group-head b { font: 600 12px/1 "Instrument Sans"; }
+.check-group-head span { font: 600 11px/1 "IBM Plex Mono"; }
+.check { display: grid; grid-template-columns: 1fr 150px 44px; column-gap: 12px; align-items: start; padding: 8px 12px;
+         border-top: 1px solid rgba(23, 25, 28, .06); }
+.check-title { display: block; font: 600 12.5px/1.25 "Instrument Sans"; }
+.check-entries { display: block; margin-top: 3px; font: 400 11px/1.35 "IBM Plex Mono"; color: #5E6269; }
+.check-fix { font: 400 11.5px/1.35 "Instrument Sans"; color: #5E6269; }
+.check-count { font: 600 12.5px/1.25 "IBM Plex Mono"; text-align: right; }
+.checks-none { padding: 10px 12px; border-radius: 10px; background: #EEF8F5; color: #0E8F7E;
+               font: 600 12.5px/1.25 "Instrument Sans"; }
+
+/* ---------- Seite 3 ff. · Anhang ---------- */
+.appendix { break-before: page; }
+.elements { width: 100%; margin-top: 16px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.elements thead { display: table-header-group; }
+.elements col.c-class { width: 165px; }
+.elements col.c-storey { width: 58px; }
+.elements col.c-real { width: 66px; }
+.elements col.c-model { width: 80px; }
+.elements col.c-action { width: 95px; }
+.elements th { padding: 8px 5px; background: #F6F4F0; text-align: left;
+               font: 500 9.5px/1 "IBM Plex Mono"; letter-spacing: .05em; color: #8A8E95; }
+.elements th:first-child { padding-left: 10px; border-radius: 6px 0 0 6px; }
+.elements th:last-child { padding-right: 10px; border-radius: 0 6px 6px 0; }
+.elements td { padding: 6px 5px; border-bottom: 1px solid #ECE8E0; font: 400 11px/1.2 "IBM Plex Mono";
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.elements td:first-child { padding-left: 10px; }
+.elements td:last-child { padding-right: 10px; }
+.elements td.name { font: 400 12px/1.2 "Instrument Sans"; }
+.elements .num { text-align: right; }
+.elements tr { break-inside: avoid; }

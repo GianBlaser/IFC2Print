@@ -1,19 +1,29 @@
-"""Report: PDF (Deckblatt + Diagramme, Matplotlib) und CSV der Bauteiltabelle.
+"""Report: Übergabeblatt als PDF (Jinja2-Template, gesetzt mit WeasyPrint) und CSV der Bauteiltabelle.
 
-Eingabe: Bauteiltabelle, Kennzahlen und Filament je Teil der Erzeugung
+Eingabe: ``ReportData`` (core/output/report_data.py) bzw. Bauteiltabelle
 Ausgabe: PDF- bzw. CSV-Datei als Bytes
+
+WeasyPrint braucht Pango. Unter Windows kommt es aus MSYS2 (README, Abschnitt PDF-Report); ist der Ordner
+PANGO_DLL_DIR vorhanden, wird er ohne weitere Einstellung gefunden.
 """
 
-import io
-import textwrap
+import base64
+import os
+import sys
+from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")   # headless, keine GUI nötig
-import matplotlib.pyplot as plt
+import jinja2
 import pandas as pd
-from matplotlib.backends.backend_pdf import PdfPages
+from markupsafe import Markup
 
-_STATUS_COLOR = {"druckbar": "#1E8A57", "kritisch": "#A86A00", "nicht_druckbar": "#C93434"}
+from config import PANGO_DLL_DIR
+from core.output.report_data import ReportData
+
+TEMPLATES = Path(__file__).parent / "templates"
+
+
+class ReportUnavailable(RuntimeError):
+    """WeasyPrint oder Pango fehlt – der PDF-Report lässt sich nicht setzen."""
 
 
 # Die CSV ist wie das PDF eine Ausgabe für Menschen: Kopfzeile deutsch, wie vor der englischen Umbenennung
@@ -34,59 +44,38 @@ def elements_csv(df: pd.DataFrame) -> bytes:
     return df.rename(columns=CSV_HEADERS).to_csv(index=False).encode("utf-8-sig")
 
 
-def _cover_page(metrics: dict, hints: list[str] = ()):
-    fig = plt.figure(figsize=(8.27, 11.69))   # A4 hoch
-    fig.suptitle("IFC2Print – Report", fontsize=20, y=0.95)
-    fig.text(0.1, 0.88, "\n".join(f"{k}:  {v}" for k, v in metrics.items()),
-             fontsize=11, va="top", family="monospace")
-    if hints:
-        text = "\n".join("• " + "\n  ".join(textwrap.wrap(h, 95)) for h in hints)
-        fig.text(0.1, 0.42, "Prüfliste\n" + text, fontsize=8, va="top", family="monospace")
-    fig.text(0.1, 0.05, "Filament, Kosten und Druckzeit sind Schätzungen.", fontsize=9, style="italic")
-    return fig
+def report_pdf(data: ReportData) -> bytes:
+    """Übergabeblatt als PDF: Übergabe mit Urteil, Regelwerk mit Prüfpunkten, Anhang mit allen Bauteilen."""
+    weasyprint = _weasyprint()
+    environment = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), autoescape=True,
+                                     trim_blocks=True, lstrip_blocks=True)
+    image = base64.b64encode(data.image_png).decode("ascii") if data.image_png else None
+    band = _css_string(f"{data.head['projekt']} · {data.head['massstab']}")      # Kopfband ab Seite 2
+    html = environment.get_template("report.html.j2").render(d=data, image=image, band=band)
+    return weasyprint.HTML(string=html, base_url=str(TEMPLATES)).write_pdf()
 
 
-def _bar_chart(values: pd.Series, title: str, axis: str, colors=None, horizontal=False):
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    if values.empty:
-        ax.text(0.5, 0.5, "keine Daten", ha="center", va="center")
-    elif horizontal:
-        ax.barh(values.index.astype(str), values.values, color=colors or "#72B7B2")
-        ax.set_xlabel(axis)
-    else:
-        ax.bar(values.index.astype(str), values.values, color=colors or "#4C78A8")
-        ax.set_ylabel(axis)
-    ax.set_title(title)
-    fig.tight_layout()
-    return fig
+def _css_string(text: str) -> Markup:
+    """Text als CSS-Zeichenkette für ``content`` im <style> des Templates (Anführungszeichen und «<» maskiert)."""
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("<", "\\3C ").replace("\n", " ")
+    return Markup(f'"{escaped}"')
 
 
-def _histogram_thicknesses(df: pd.DataFrame):
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    thicknesses = df["thickness_model_mm"].dropna()
-    if len(thicknesses):
-        ax.hist(thicknesses, bins=20, color="#E45756")
-        ax.set_xlabel("Dicke im Modell (mm)")
-        ax.set_ylabel("Anzahl")
-    ax.set_title("Bauteildicken im Modellmassstab")
-    fig.tight_layout()
-    return fig
+def available() -> bool:
+    """True, wenn WeasyPrint samt Pango geladen werden kann (Tests, Skripte)."""
+    try:
+        _weasyprint()
+    except ReportUnavailable:
+        return False
+    return True
 
 
-def report_pdf(df: pd.DataFrame, metrics: dict, filament_per_storey: dict[str, float],
-               hints: list[str] = ()) -> bytes:
-    printed = df[df["is_printed"]] if "is_printed" in df else df    # Status zählt nur, was gedruckt wird
-    status = printed["status"].value_counts()
-    figures = (
-        _cover_page(metrics, hints),
-        _bar_chart(status, "Gedruckte Bauteile je Druckbarkeits-Status", "Anzahl",
-                colors=[_STATUS_COLOR.get(s, "#4C78A8") for s in status.index]),
-        _bar_chart(pd.Series(filament_per_storey), "Filament je Geschoss", "Filament (g, Schätzung)", horizontal=True),
-        _histogram_thicknesses(printed),
-    )
-    buffer = io.BytesIO()
-    with PdfPages(buffer) as pdf:
-        for fig in figures:
-            pdf.savefig(fig)
-            plt.close(fig)
-    return buffer.getvalue()
+def _weasyprint():
+    """WeasyPrint erst beim ersten Report laden; fehlt es (oder Pango), eine verständliche Meldung."""
+    if sys.platform == "win32" and Path(PANGO_DLL_DIR).is_dir():
+        os.environ.setdefault("WEASYPRINT_DLL_DIRECTORIES", PANGO_DLL_DIR)
+    try:
+        import weasyprint
+    except (ImportError, OSError) as error:
+        raise ReportUnavailable("PDF-Report braucht WeasyPrint – siehe README") from error
+    return weasyprint

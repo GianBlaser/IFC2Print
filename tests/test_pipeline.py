@@ -8,6 +8,7 @@ from config import QUALITIES
 from core import pipeline
 from core.analysis.ruleset import Ruleset
 from core.ifc.model import IfcModel
+from core.output import report
 
 TEST_DATA = Path(__file__).parent.parent / "testdaten"
 PROFILE = {"name": "Test", "min_wall_mm": 0.8, "layer_height_mm": 0.2,
@@ -61,9 +62,27 @@ def test_downloads(result, mfh):
     assert len(result.stl()) > 84
     assert result.stl_zip("mfh")[:2] == b"PK"
     assert len(result.stl_plate(PROFILE)) > 84
-    assert result.report_pdf(df)[:4] == b"%PDF"
     assert b"klasse" in pipeline.elements_csv(df)               # Kopfzeile deutsch (CSV_HEADERS)
     assert all(glb[:4] == b"glTF" for glb in result.preview.values())
+
+
+def test_result_carries_what_the_report_needs(result):
+    """Prüfpunkte des Laufs strukturiert, die Warnungen als Sätze wie bisher; Überhänge und Einstellungen."""
+    cut = next(p for p in result.check_points if p["kind"] == "oeffnungen")
+    n = sum(count for _, count in cut["entries"])
+    assert f"{n} Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge)." in result.warnings
+    assert not any(p["category"] == "georeferenz" and p["kind"] != "versatz" for p in result.check_points)
+    assert {o.name for o in result.overhangs} <= set(result.parts)
+    assert result.settings["scale"] == 200 and result.settings["profile"]["name"] == "Test"
+    assert (result.connector_count, result.pegs_per_part) == (0, {})
+
+
+@pytest.mark.skipif(not report.available(), reason="WeasyPrint/Pango fehlt")
+def test_report_pdf(result, mfh):
+    ifc, df = mfh
+    context = pipeline.report_context(ifc, df, "MFH_eBKPH_Test.ifc", scale=200, ruleset_name="1:200",
+                                      profile=PROFILE, material=MATERIAL)
+    assert result.report_pdf(df, context)[:4] == b"%PDF"
 
 
 def test_preview_per_storey(mfh):

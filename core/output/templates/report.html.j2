@@ -1,0 +1,189 @@
+{#- PDF-Report IFC2Print, Variante 2a «Datenblatt» (design_handoff_pdf_report). Alle Werte kommen fertig
+    formatiert aus core/output/report_data.py; hier wird nur gesetzt. -#}
+{% macro icon(s) %}
+{% set a = s.icon_data %}
+{% if s.icon == "massstab" %}
+<svg class="icon" viewBox="0 0 50 7" width="50" height="7"><rect x="0.5" y="0.5" width="49" height="6" fill="none" stroke="#EDECE8" stroke-width="1"/><rect x="1" y="1" width="12" height="5" fill="#EDECE8"/><rect x="25" y="1" width="12" height="5" fill="#EDECE8"/></svg>
+{% elif s.icon == "duese" %}
+<svg class="icon" viewBox="0 0 44 44" width="44" height="44">
+  <rect x="15" y="1" width="14" height="9" fill="#5E6269"/>
+  <polygon points="11,10 33,10 33,17 11,17" fill="#A0A6B0"/>
+  <line x1="18" y1="10" x2="18" y2="17" stroke="#5E6269" stroke-width="0.8"/><line x1="26" y1="10" x2="26" y2="17" stroke="#5E6269" stroke-width="0.8"/>
+  <polygon points="14,17 30,17 24,28 20,28" fill="#EDECE8"/>
+  <rect x="20.6" y="28" width="2.8" height="3" fill="#FF6B2C"/>
+  <text x="22" y="41" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="#FF6B2C">{{ a.text }}</text>
+</svg>
+{% elif s.icon == "voxel" %}
+<svg class="icon" viewBox="0 0 74 36" width="74" height="36">
+  <g opacity="0.12"><rect x="50" y="16" width="16" height="16" fill="#EDECE8"/><polygon points="50,16 56,11 72,11 66,16" fill="#A0A6B0"/><polygon points="66,16 72,11 72,27 66,32" fill="#5E6269"/></g>
+  <g opacity="0.3"><rect x="34" y="16" width="16" height="16" fill="#EDECE8"/><polygon points="34,16 40,11 56,11 50,16" fill="#A0A6B0"/><polygon points="50,16 56,11 56,27 50,32" fill="#5E6269"/></g>
+  <rect x="18" y="16" width="16" height="16" fill="#EDECE8"/><polygon points="18,16 24,11 40,11 34,16" fill="#A0A6B0"/><polygon points="34,16 40,11 40,27 34,32" fill="#5E6269"/>
+  <line x1="13" y1="16" x2="13" y2="32" stroke="#FF6B2C" stroke-width="1"/><line x1="11" y1="16" x2="15" y2="16" stroke="#FF6B2C" stroke-width="1"/><line x1="11" y1="32" x2="15" y2="32" stroke="#FF6B2C" stroke-width="1"/>
+  <text x="8" y="24" transform="rotate(-90 8 24)" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" font-weight="600" fill="#FF6B2C">{{ a.text }}</text>
+</svg>
+{% elif s.icon == "winkel" %}
+<svg class="icon" viewBox="0 -2 40 44" width="36" height="40">
+  <line x1="4" y1="20" x2="38" y2="20" stroke="#5E6269" stroke-width="1" stroke-dasharray="2 2"/>
+  <line x1="4" y1="0" x2="4" y2="40" stroke="#5E6269" stroke-width="1" stroke-dasharray="2 2"/>
+  <g transform="rotate({{ a.rotate }} 4 20)"><rect x="8" y="12" width="16" height="8" fill="none" stroke="#EDECE8" stroke-width="1.2"/><line x1="4" y1="20" x2="32" y2="20" stroke="#FF6B2C" stroke-width="2"/></g>
+  <circle cx="4" cy="20" r="2" fill="#FF6B2C"/>
+</svg>
+{% elif s.icon == "oeffnungen" %}
+<svg class="icon" viewBox="0 0 52 34" width="52" height="34">
+  <polygon points="2,8 10,2 50,2 42,8" fill="#A0A6B0"/>
+  <polygon points="42,8 50,2 50,26 42,32" fill="#5E6269"/>
+  <rect x="2" y="8" width="40" height="24" fill="#EDECE8"/>
+  {% if a.windows == "vertieft" %}<rect x="7" y="13" width="15" height="10" fill="#5E6269"/><rect x="9" y="13" width="13" height="8.5" fill="#B8BCC2"/>
+  {% elif a.windows == "ausgeschnitten" %}<rect x="7" y="13" width="15" height="10" fill="#17191C"/><polygon points="7,13 22,13 22,15 9,15 9,23 7,23" fill="#5E6269"/>
+  {% else %}<rect x="7" y="13" width="15" height="10" fill="#EDECE8" stroke="#8A8E95" stroke-width="0.8"/>{% endif %}
+  {% if a.doors == "vertieft" %}<rect x="28" y="16" width="9" height="16" fill="#5E6269"/><rect x="30" y="16" width="7" height="16" fill="#B8BCC2"/>
+  {% elif a.doors == "ausgeschnitten" %}<rect x="28" y="16" width="9" height="16" fill="#17191C"/><polygon points="28,16 37,16 37,18 30,18 30,32 28,32" fill="#5E6269"/>
+  {% else %}<rect x="28" y="16" width="9" height="16" fill="#EDECE8" stroke="#8A8E95" stroke-width="0.8"/>{% endif %}
+</svg>
+{% elif s.icon == "verbinder" %}
+<svg class="icon" viewBox="0 0 48 32" width="48" height="32"><polygon points="6,2 42,2 42,14 31.6,14 29.4,6.5 18.6,6.5 16.4,14 6,14" fill="#EDECE8"/><rect x="6" y="20" width="36" height="10" fill="#5E6269"/><polygon points="17,20 31,20 29,12 19,12" fill="#FF6B2C"/></svg>
+{% endif %}
+{% endmacro %}
+{#- ✓ als Zeichnung: IBM Plex Mono hat kein Häkchen, die Ersatzschrift wäre je System eine andere -#}
+{% macro check_mark(color, size=22) %}<svg viewBox="0 0 22 22" width="{{ size }}" height="{{ size }}"><polyline points="6.5,11.5 9.8,14.8 15.8,7.8" fill="none" stroke="{{ color }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endmacro %}
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<title>IFC2Print – {{ d.head.projekt }}</title>
+<link rel="stylesheet" href="report.css">
+<style>@page { @top-center { content: {{ band }}; } }</style>
+</head>
+<body>
+
+{#- ================= Seite 1 · Übergabe ================= #}
+<section class="cover">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" width="30" height="30"><g fill="#EDECE8"><polygon points="4.72 34.87 24 46 24 43.08 4.72 31.95"/><polygon points="4.72 30.36 24 41.49 24 38.58 4.72 27.45"/><polygon points="4.72 25.86 24 36.99 24 34.07 4.72 22.94"/><polygon points="4.72 21.35 24 32.48 24 29.57 4.72 18.43"/></g><g fill="#EDECE8" opacity="0.5"><polygon points="43.28 34.87 24 46 24 43.08 43.28 31.95"/><polygon points="43.28 30.36 24 41.49 24 38.58 43.28 27.45"/><polygon points="43.28 25.86 24 36.99 24 34.07 43.28 22.94"/><polygon points="43.28 21.35 24 32.48 24 29.57 43.28 18.43"/></g><polygon points="4.72 15.78 24 26.92 24 2" fill="#E8562A"/><polygon points="43.28 15.78 24 26.92 24 2" fill="#903216"/></svg>
+      <b>IFC2Print</b>
+    </div>
+    <div class="project">
+      <span class="label">PROJEKT</span>
+      <b class="project-name">{{ d.head.projekt }}</b>
+      <span class="file">{{ d.head.datei }}</span>
+    </div>
+    <div class="specs">
+      {% for s in d.specs %}
+      <div class="spec">
+        <div class="spec-text">
+          <span class="spec-key">{{ s.key }}</span>
+          <span class="spec-value{% if s.nowrap %} nowrap{% endif %}">{% for line in s.value.split("\n") %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
+        </div>
+        {% if s.icon %}<div class="spec-icon">{{ icon(s) }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <span class="generated">Erzeugt {{ d.head.datum }}<br>Seite 1 / <a class="pages" href="#ende"></a></span>
+  </aside>
+
+  <div class="main">
+    <span class="kicker">01 · ÜBERGABE</span>
+    <h1>{{ d.head.title }}</h1>
+    {% if image %}
+    <img class="model" src="data:image/png;base64,{{ image }}" alt="Modellansicht">
+    {% else %}
+    <div class="model model-empty"><span>Noch nicht erzeugt – Modellansicht folgt nach «STL erzeugen»</span></div>
+    {% endif %}
+
+    {% if d.verdict %}
+    <div class="verdict">
+      {% for v in d.verdict %}
+      <div class="verdict-row">
+        <span class="mark mark-{{ v.level }}">{% if v.level == "ok" %}{{ check_mark("#0E8F7E") }}{% else %}{{ v.mark }}{% endif %}</span>
+        <div><b class="verdict-title">{{ v.title }}</b><span class="verdict-sub">{{ v.sub }}</span></div>
+        <b class="verdict-value">{{ v.value }}</b>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if d.parts %}
+    <div class="parts">
+      <div class="parts-head"><span>TEIL</span><span>GRÖSSE (MM)</span><span>STÜTZFLÄCHE</span><span>ZAPFEN</span></div>
+      {% for p in d.parts %}
+      <div class="parts-row">
+        <span class="part-name"><i style="background:{{ p.color }}"></i>{{ p.name }}</span>
+        <span>{{ p.size }}</span>
+        <span class="{% if p.has_support %}support{% else %}faint{% endif %}">{{ p.support }}</span>
+        <span class="muted">{{ p.pegs }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{#- ================= Seite 2 · Regelwerk ================= #}
+<section class="rules">
+  <span class="kicker">02 · REGELWERK {{ d.head.regelset }}</span>
+  <h2>{{ d.head.rules_title }}</h2>
+
+  <div class="decision-bar">
+    {% for x in d.decisions if x.count %}<i style="width:{{ x.width }};background:{{ x.color }}"></i>{% endfor %}
+  </div>
+  <div class="decision-legend">
+    {% for x in d.decisions %}
+    <div><b>{{ x.n }}</b><span><i style="background:{{ x.color }}"></i>{{ x.label }}</span></div>
+    {% endfor %}
+  </div>
+
+  <div class="block-head">
+    <span>DRUCKBARKEIT JE IFC-KLASSE</span>
+    <span class="legend">
+      <span><i style="background:#93D8C4"></i>DRUCKBAR</span><span><i style="background:#FFC9A3"></i>KRITISCH</span><span><i style="background:#F4A6B4"></i>NICHT DRUCKBAR</span><span><i style="background:#D6D9DE"></i>NICHT GEDRUCKT</span>
+    </span>
+  </div>
+  <div class="classes">
+    {% for c in d.classes %}
+    <div class="class-row">
+      <span class="class-name">{{ c.ifc_class }}</span>
+      <span class="class-bar"><i style="width:{{ c.ok_width }};background:#93D8C4"></i><i style="width:{{ c.kr_width }};background:#FFC9A3"></i><i style="width:{{ c.ni_width }};background:#F4A6B4"></i><i style="width:{{ c.sk_width }};background:#D6D9DE"></i></span>
+      <span class="class-count">{{ c.count }}</span>
+      <span class="class-action">{% for a in c.actions %}<span style="color:{{ a.color }}">{{ a.label }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</span>
+    </div>
+    {% endfor %}
+    {% if d.classes_more %}<div class="class-more">{{ d.classes_more }}</div>{% endif %}
+  </div>
+
+  <div class="block-head checks-head"><span>PRÜFPUNKTE</span><span>{{ d.check_summary }}</span></div>
+  {% if d.check_groups %}
+  {% for g in d.check_groups %}
+  <div class="check-group" style="background:{{ g.background }}">
+    <div class="check-group-head" style="background:{{ g.head_background }};color:{{ g.ink }}"><b>{{ g.title }}</b><span>{{ g.count }}</span></div>
+    {% for k in g.points %}
+    <div class="check">
+      <div><b class="check-title">{{ k.title }}</b><span class="check-entries">{{ k.entries }}</span></div>
+      <span class="check-fix">{{ k.fix }}</span>
+      <b class="check-count">{{ k.count }}</b>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="checks-none">{{ check_mark("#0E8F7E", 14) }}Keine Auffälligkeiten.</div>
+  {% endif %}
+</section>
+
+{#- ================= Seite 3 ff. · Anhang ================= #}
+<section class="appendix">
+  <span class="kicker">03 · ANHANG</span>
+  <h2>Bauteiltabelle</h2>
+  <table class="elements">
+    <colgroup><col class="c-class"><col><col class="c-storey"><col class="c-real"><col class="c-model"><col class="c-action"></colgroup>
+    <thead><tr><th>KLASSE</th><th>NAME</th><th>GESCH.</th><th class="num">REAL (MM)</th><th>MODELL (MM)</th><th>AKTION</th></tr></thead>
+    <tbody>
+      {% for r in d.elements %}
+      <tr><td>{{ r.ifc_class }}</td><td class="name">{{ r.name }}</td><td>{{ r.storey }}</td><td class="num">{{ r.real }}</td><td>{{ r.model }}</td><td style="color:{{ r.color }}">{{ r.action }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <span id="ende"></span>
+</section>
+</body>
+</html>

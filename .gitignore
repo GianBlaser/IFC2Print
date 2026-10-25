@@ -19,3 +19,9 @@ testdaten/
 
 # Git-Bundles
 *.bundle
+
+# Design-Referenz des PDF-Reports (HTML + JavaScript aus dem Design-Werkzeug) nur lokal: Vorgabe
+# Leistungsnachweis «ausschliesslich Python» (tests/test_architecture.py). Die Umsetzungsbeschreibung
+# design_handoff_pdf_report/README.md ist im Repo.
+design_handoff_pdf_report/*.html
+design_handoff_pdf_report/*.js

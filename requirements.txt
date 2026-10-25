@@ -9,10 +9,14 @@ scikit-image>=0.24        # Marching Cubes
 trimesh>=4.4              # Meshes, STL/GLB-Export
 manifold3d>=3.0         # Boolean für Steckverbinder
 fast-simplification>=0.1.7  # Quadric-Dezimierung (von trimesh genutzt)
-matplotlib>=3.9           # PDF-Report
+matplotlib>=3.9           # Modellbild im PDF-Report
 psutil>=5.9               # Arbeitsspeicher abfragen (Speicherbremse, auch unter Windows)
 nicegui>=3.0              # Oberfläche inkl. 3D-Viewer (ui.scene)
 fastapi>=0.110             # Route für die GLB-Dateien (kommt auch mit nicegui)
+
+# PDF-Report (HTML-Template → PDF). WeasyPrint braucht Pango, unter Windows aus MSYS2 (siehe README)
+jinja2>=3.1
+weasyprint>=62
 
 # Tests
 pytest>=8

@@ -1,7 +1,8 @@
 """Ergebnis einer Modellerzeugung: Teile, Kennzahlen und alle Downloads (STL, ZIP, Druckplatte, PDF).
 
 Zweck:   Bündelt, was ``generate`` liefert, und erzeugt daraus die Dateien für den Download.
-Eingabe: Voxelgitter, Geschoss-Teile, Warnungen, Kennzahlen und die Eingaben der Kalkulation.
+Eingabe: Voxelgitter, Geschoss-Teile, Warnungen, Kennzahlen, Prüfpunkte, Überhänge, Steckverbinder und die
+         Einstellungen des Laufs.
 Ausgabe: ``Result`` mit STL-/ZIP-/PDF-Bytes und Vorschau; ``export_watertight`` und ``filename`` als Hilfen.
 """
 
@@ -17,6 +18,8 @@ import trimesh
 
 from config import VIEWER_MAX_FACES
 from core.output import preview, report
+from core.output.report_data import build_report_data
+from core.parts.overhangs import Overhang
 from core.parts.print_layout import print_plate
 from core.voxels.grid import VoxelGrid
 
@@ -28,7 +31,6 @@ class Result:
     parts: dict[str, trimesh.Trimesh] = field(repr=False)
     warnings: list[str]
     metrics: dict
-    filament_per_storey: dict[str, float]
     volume_cm3: float
     grams: float
     cost_chf: float
@@ -41,6 +43,15 @@ class Result:
     layer_height_mm: float = 0.0
     density_g_cm3: float = 0.0
     price_chf_kg: float = 0.0
+    # Für den PDF-Report (core/output/report_data.py)
+    check_points: list[dict] = field(default_factory=list)      # für den Druck relevant, mit denen des Laufs
+    overhangs: list[Overhang] = field(default_factory=list, repr=False)
+    support_elements: dict[str, str] = field(default_factory=dict)   # Teil → Bauteil an der grössten Stützstelle
+    connector_count: int = 0
+    joint_count: int = 0
+    pegs_per_part: dict[str, int] = field(default_factory=dict)      # Zapfen je Teil (das Teil unter der Fuge)
+    clearance_mm: float = 0.0
+    settings: dict = field(default_factory=dict)   # scale, pitch_mm, angle, windows, doors, profile, material
 
     @property
     def print_parts(self) -> dict[str, trimesh.Trimesh]:
@@ -54,6 +65,11 @@ class Result:
         Früher wurde dafür das ganze Gitter neu vernetzt – beim NEST-Modell mit 10.8 GB Speicherspitze.
         """
         return trimesh.util.concatenate(list(self.parts.values()))
+
+    @cached_property
+    def leaky_parts(self) -> list[str]:
+        """Druckteile, die nach dem STL-Export nicht wasserdicht sind (für den PDF-Report)."""
+        return [name for name, mesh in self.print_parts.items() if not export_watertight(mesh)]
 
     def stl(self) -> bytes:
         """Das ganze Modell als eine STL-Datei."""
@@ -72,9 +88,9 @@ class Result:
         plate = print_plate(self.print_parts, profile["build_volume_x_mm"], profile["build_volume_y_mm"])
         return plate.export(file_type="stl")
 
-    def report_pdf(self, df: pd.DataFrame) -> bytes:
-        """Bericht als PDF: Deckblatt mit Kennzahlen und Hinweisen, dazu Diagramme zu Status, Filament und Dicken."""
-        return report.report_pdf(df, self.metrics, self.filament_per_storey, self.warnings)
+    def report_pdf(self, df: pd.DataFrame, context: dict) -> bytes:
+        """Übergabeblatt als PDF (core/output/report.py); ``context`` von ``report_data.report_context``."""
+        return report.report_pdf(build_report_data(df, context, self, self.check_points))
 
     @cached_property
     def preview(self) -> dict[str, bytes]:
