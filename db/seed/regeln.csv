@@ -6,6 +6,7 @@ ruleset_name,ifc_class_name,action,category
 1:500,IfcFooting,entfernen,Fundament
 1:500,IfcColumn,verdicken,Stütze
 1:500,IfcBeam,verdicken,Träger
+1:500,IfcBeam.LINTEL,fuellen,Träger
 1:500,IfcChimney,verdicken,Dach
 1:500,IfcStair,entfernen,Treppe
 1:500,IfcStairFlight,entfernen,Treppe
@@ -30,6 +31,7 @@ ruleset_name,ifc_class_name,action,category
 1:200,IfcFooting,entfernen,Fundament
 1:200,IfcColumn,verdicken,Stütze
 1:200,IfcBeam,verdicken,Träger
+1:200,IfcBeam.LINTEL,fuellen,Träger
 1:200,IfcChimney,verdicken,Dach
 1:200,IfcStair,behalten,Treppe
 1:200,IfcStairFlight,behalten,Treppe
@@ -54,6 +56,7 @@ ruleset_name,ifc_class_name,action,category
 1:100,IfcFooting,entfernen,Fundament
 1:100,IfcColumn,verdicken,Stütze
 1:100,IfcBeam,verdicken,Träger
+1:100,IfcBeam.LINTEL,fuellen,Träger
 1:100,IfcChimney,verdicken,Dach
 1:100,IfcStair,behalten,Treppe
 1:100,IfcStairFlight,behalten,Treppe

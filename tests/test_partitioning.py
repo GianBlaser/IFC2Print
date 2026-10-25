@@ -10,7 +10,8 @@ from core.ifc.model import IfcModel
 from core.parts import partitioning
 from core.parts.cleanup import assign_islands, assign_small_pieces, assign_with_message, without_sliver
 from core.parts.print_layout import pack, print_plate
-from core.parts.storey_joints import cuts, flush_slabs, smooth_joint, storey_and_above, storey_heights
+from core.parts.storey_joints import (cuts, flat_undersides, flush_slabs, smooth_joint, storey_and_above,
+                                      storey_heights)
 from core.voxels.grid import VoxelGrid
 
 _MFH = Path(__file__).parent.parent / "testdaten" / "MFH_eBKPH_Real.ifc"
@@ -306,3 +307,51 @@ def test_deep_ceiling_over_rooms_becomes_own_part():
     assert (t.labels[29, 1:19, 2:15] == 0).all()           # die Wand darunter bleibt beim EG
     parts = partitioning.mesh_pieces(voxel_grid, t)
     assert set(parts) == {"EG", "OG", "Decke EG"} and parts["Decke EG"].is_watertight
+
+
+def _slab_over_storey(thickness: int = 4) -> tuple[np.ndarray, np.ndarray]:
+    """Labels und Gitter: unten Teil 0 (Schichten 0–4), darüber die Decke von Teil 1 ab der Fuge 5."""
+    labels = np.full((20, 20, 12), -1, dtype=np.int16)
+    labels[:, :, :5] = 0
+    labels[:, :, 5:5 + thickness] = 1
+    return labels, labels >= 0
+
+
+def _flatten(labels: np.ndarray, m: np.ndarray) -> dict:
+    return flat_undersides(labels, m, [(1, 5, np.ones((20, 20), dtype=bool))], depth=4, radius=2)
+
+
+def test_narrow_recess_in_the_underside_is_filled():
+    labels, m = _slab_over_storey()
+    labels[5:15, 8:10, 5:7] = -1                            # Storenkasten-Rinne: 2 Voxel breit, 2 tief
+    m[5:15, 8:10, 5:7] = False
+    assert _flatten(labels, m) == {1: (1, 40)}
+    assert (labels[:, :, 5:9] == 1).all() and m[:, :, 5:9].all()
+
+
+def test_wide_or_deep_recesses_stay_open():
+    labels, m = _slab_over_storey(thickness=6)
+    labels[2:10, 2:10, 5:7] = -1                            # breit (Treppenauge, Deckenversatz)
+    labels[12:18, 15:17, 5:10] = -1                         # schmal, aber tiefer als depth
+    before = labels.copy()
+    assert _flatten(labels, labels >= 0) == {}
+    assert (labels == before).all()
+
+
+def test_roof_voxels_in_a_recess_stay_with_the_roof():
+    labels, m = _slab_over_storey()
+    labels[5:15, 8:10, 5] = 2                               # Dachvoxel in der Rinne
+    labels[5:15, 8:10, 6] = -1
+    before = labels.copy()
+    assert _flatten(labels, labels >= 0) == {}
+    assert (labels == before).all()
+
+
+def test_partition_flattens_the_underside_and_reports_it():
+    m = np.zeros((30, 30, 30), dtype=bool)
+    m[0], m[-1], m[:, 0], m[:, -1] = (True,) * 4             # Aussenwände über beide Geschosse
+    m[:, :, :2] = m[:, :, 12:16] = True                     # Bodenplatte, Decke ab Fuge 12
+    m[10:20, 14:16, 12:14] = False                          # Rinne 2 Voxel breit, 2 tief (tiefer als JOINT_LEVELING_MM)
+    t = partitioning.partition_grid(VoxelGrid(m, np.zeros(3), 0.4), [("EG", 0.0), ("OG", 4.8)], 200)
+    assert (t.labels[1:-1, 1:-1, 12] == 1).all()
+    assert any("Unterseite eben" in w for w in t.warnings)

@@ -12,7 +12,8 @@ Zwischen zwei Geschossteilen liegt eine Fuge. Ihre Höhe entsteht in drei Schrit
      Teils bleibt eben. Breite, tiefer liegende Deckenbereiche (TG-Dach neben dem
      Haus) gehen zunächst ganz ans untere Teil, statt zerschnitten zu werden.
 Danach trennt ``ceiling_lids`` solche tiefer liegenden Decken als eigenes Teil vom unteren ab
-(core/parts/partitioning.py): Als Deckel bräuchten sie Stützen in den Räumen darunter.
+(core/parts/partitioning.py): Als Deckel bräuchten sie Stützen in den Räumen darunter. Zum Schluss füllt
+``flat_undersides`` schmale Einstülpungen in der Unterseite jedes Geschossteils (Storenkasten, Laibungsschlitze).
 
 Falle (verifiziert am NEST-Modell): ``IfcBuildingStorey.Elevation`` ist relativ
 (EG = 0.0, Wände aber ab 432.6 m Welt-Z). Die Fugenhöhe kommt deshalb aus der
@@ -161,6 +162,37 @@ def ceiling_lids(part: np.ndarray, k_next: int, window: int, plate: int, wall: i
         if len(undersides):
             lids.append((region, z0 + int(np.bincount(undersides).argmax())))   # häufigste Deckenunterseite
     return lids
+
+
+def flat_undersides(labels: np.ndarray, m: np.ndarray, joints: list[tuple[int, int, np.ndarray]], depth: int,
+                    radius: int) -> dict[int, tuple[int, int]]:
+    """Füllt schmale Einstülpungen in der Unterseite der Geschossteile bis zur Fuge (verändert ``labels`` und ``m``).
+
+    ``joints``: je Geschossteil (Label, Fugenschicht k, 2D-Maske der Spalten mit Fuge bei k). Einstülpung = Spalte, in der
+    die unterste Schicht des Teils 1 bis ``depth`` Voxel über k liegt (Storenkasten-Rinne, Laibungsschlitz eines Fensters
+    darunter, Fuge zwischen Bauteilen). Gefüllt werden nur schmale – Bereiche, die eine Öffnung mit Radius ``radius``
+    überstehen (Treppenauge), bleiben – und nur über Luft oder Voxeln tieferer Geschosse; Dächer und Deckel bleiben.
+    Läuft vor dem Vernetzen und den Steckverbindern: deren Taschen entstehen erst danach im Netz.
+    Rückgabe je Teil mit Füllung: (Anzahl Einstülpungen, gefüllte Voxel).
+    """
+    result = {}
+    for part_label, k, columns in joints:
+        top = min(labels.shape[2], k + depth + 1)
+        window = labels[:, :, k:top]                                        # Sicht: Schreiben wirkt auf ``labels``
+        part = window == part_label
+        lift = part.argmax(axis=2)                                          # Schichten zwischen Fuge und Unterseite
+        recess = columns & part.any(axis=2) & (lift > 0)
+        if not recess.any():
+            continue
+        narrow = recess & ~binary_opening(recess, structure=np.ones((3, 3), dtype=bool), iterations=radius)
+        below = np.arange(top - k)[None, None, :] < lift[:, :, None]
+        narrow &= ~(below & (window > part_label)).any(axis=2)             # Dach- oder Deckelvoxel: nicht anfassen
+        fill = narrow[:, :, None] & below
+        if fill.any():
+            window[fill] = part_label
+            m[:, :, k:top] |= fill
+            result[part_label] = (label(narrow, structure=np.ones((3, 3), dtype=bool))[1], int(fill.sum()))
+    return result
 
 
 def _run_length(m: np.ndarray, start: int, step: int, n: int) -> np.ndarray:

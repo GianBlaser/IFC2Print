@@ -8,6 +8,7 @@ from core.connectors import geometry
 from core.connectors.geometry import apply_connectors, Connector
 from core.connectors.planning import plan_connectors
 from core.parts.partitioning import Partition
+from core.parts.storey_joints import flat_undersides
 from core.voxels.grid import VoxelGrid
 from core.voxels.meshing import marching_cubes
 
@@ -83,6 +84,22 @@ def test_apply_watertight():
     assert new["oben"].volume < parts["oben"].volume            # Taschen
     # Tasche bleibt Sackloch: Deckenoberseite unverändert geschlossen
     assert new["oben"].bounds[1][2] == pytest.approx(parts["oben"].bounds[1][2])
+
+
+def test_flat_underside_keeps_the_connectors():
+    """Storenkasten-Rinne über der Wandkrone: nach ``flat_undersides`` dieselben Verbinder wie ohne Rinne."""
+    clean_grid, clean = _house()
+    voxel_grid, partition = _house()
+    k0 = 3 + 30                                                        # Fuge: Unterseite der oberen Decke
+    partition.labels[20:80, 1:3, k0:k0 + 2] = -1                       # Rinne 2 Voxel breit, 2 tief, über der Krone
+    voxel_grid.matrix[20:80, 1:3, k0:k0 + 2] = False
+    flat_undersides(partition.labels, voxel_grid.matrix, [(1, k0, np.ones(partition.labels.shape[:2], dtype=bool))],
+                    depth=4, radius=2)
+    assert (partition.labels == clean.labels).all() and (voxel_grid.matrix == clean_grid.matrix).all()
+    plan, warnings = plan_connectors(voxel_grid, partition, CLEARANCE)
+    assert not warnings and plan == plan_connectors(clean_grid, clean, CLEARANCE)[0]
+    new, warnings = apply_connectors(_parts(voxel_grid, partition), {0: "unten", 1: "oben"}, plan, CLEARANCE)
+    assert not warnings and all(m.is_watertight for m in new.values())
 
 
 def test_too_narrow_wall_gives_warning():

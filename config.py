@@ -112,6 +112,12 @@ JOINT_WALL_MAX_MM = 500.0
 # Tiefer als die Unterseite des Teils ragende Stücke (letzte Treppenstufen in der Deckenöffnung) gehen bis zu dieser
 # Tiefe (real) ans Teil darunter, sonst hingen sie unter der Bodenplatte und höben das Teil vom Bett ab.
 JOINT_OVERHANG_MM = 500.0
+# Unterseite eben (core/parts/storey_joints.flat_undersides): Einstülpungen in der Unterseite eines Geschossteils,
+# schmaler als JOINT_RECESS_WIDTH_MM (real, schmale Seite im Grundriss) und höchstens JOINT_RECESS_DEPTH_MM tief,
+# werden bis zur Fuge gefüllt: Storenkasten-Rinnen (160–250 mm), Laibungsschlitze von Fenstern darunter, Fugen zwischen
+# Bauteilen. Treppenaugen (ab ~900 mm) und durchgehende Schächte bleiben offen. Die Tiefe deckt Decke samt Bodenaufbau.
+JOINT_RECESS_WIDTH_MM = 300.0
+JOINT_RECESS_DEPTH_MM = 500.0
 # Suchfenster um die Geschoss-Z (reale m), in dem die Deckenunterkante gesucht wird: nach unten
 # tief genug für dicke, geebnete Bodenplatten samt Magerbeton, nach oben nur knapp.
 JOINT_SEARCH_WINDOW_BELOW_M = 1.2

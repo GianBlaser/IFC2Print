@@ -9,6 +9,8 @@ Ablauf (``partition_grid``):
   2. Dächer (core/parts/roof.py: geneigte Dachbauteile) erhalten ein eigenes Label.
   3. Tiefer liegende Decken über Räumen (Deckel) werden eigene Teile «Decke <Geschoss>».
   4. Inseln, Kleinteile und hängende Stücke dem Nachbarteil zuordnen (core/parts/cleanup.py).
+  5. Schmale Einstülpungen in der Unterseite der Geschossteile füllen (storey_joints.flat_undersides) – zuletzt, damit
+     nichts sie wieder aufreisst, und vor den Steckverbindern, deren Taschen erst im Netz entstehen.
 Danach vernetzt ``mesh_pieces`` jedes Teil einzeln; die Anordnung auf dem Druckbett liegt in
 core/parts/print_layout.py.
 
@@ -24,9 +26,11 @@ import trimesh
 from scipy.ndimage import find_objects
 
 from config import (CAVITY_FILL_RATIO, ROOF_MIN_RATIO, JOINT_OVERHANG_MM, SPECK_MIN_VOLUME_MM3, JOINT_LEVELING_MM,
-                    JOINT_SEARCH_WINDOW_BELOW_M, JOINT_WALL_MAX_MM, JOINT_WIDTH_MM, JOINT_SLAB_MM)
+                    JOINT_RECESS_DEPTH_MM, JOINT_RECESS_WIDTH_MM, JOINT_SEARCH_WINDOW_BELOW_M, JOINT_WALL_MAX_MM,
+                    JOINT_WIDTH_MM, JOINT_SLAB_MM)
 from core.parts.cleanup import assign_with_message, without_sliver
-from core.parts.storey_joints import ceiling_lids, cuts, joint_columns, smooth_joint, storey_and_above
+from core.parts.storey_joints import (ceiling_lids, cuts, flat_undersides, joint_columns, smooth_joint,
+                                      storey_and_above)
 from core.voxels.grid import VoxelGrid
 from core.voxels.meshing import marching_cubes, postprocessed
 
@@ -59,10 +63,12 @@ def partition_grid(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]], scal
     width = int(round(JOINT_WIDTH_MM / 1000 * voxel / 2))          # Radius der Öffnung: halbe Mindestbreite
     labels = np.zeros(m.shape, dtype=np.int16)
     k_index = np.arange(m.shape[2], dtype=np.int32)
+    joints = []                                                     # (Label, Fuge, Spalten mit Fuge bei k) je Geschoss
     for i, (name, k, _) in enumerate(ranges[1:], start=1):
         height = smooth_joint(m, k, joint_columns(voxel_grid, floor_plans, name) | outside, leveling, plate, width,
                               flush=True)
         labels[k_index[None, None, :] >= height[:, :, None]] = i
+        joints.append((i, k, height == k))
     names = [name for name, _, _ in ranges]
     combined = max(1, int(m.sum()))
     if roof is not None and roof_names:
@@ -75,6 +81,11 @@ def partition_grid(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]], scal
     _ceiling_parts(labels, ranges, names, voxel, plate, combined)
     warnings += assign_with_message(labels, names, len(ranges), max(1, int(JOINT_OVERHANG_MM / 1000 * voxel)),
                                        voxel_grid.pitch)
+    depth = max(1, int(round(JOINT_RECESS_DEPTH_MM / 1000 * voxel)))
+    radius = max(1, int(round(JOINT_RECESS_WIDTH_MM / 1000 * voxel / 2)))     # Radius der Öffnung: halbe Breite
+    for i, (count, filled) in flat_undersides(labels, m, joints, depth, radius).items():
+        warnings.append(f"«{names[i]}»: Unterseite eben – {count} schmale Einstülpungen gefüllt "
+                        f"({filled * voxel_grid.pitch ** 3:.0f} mm³; Storenkasten, Laibungen, Fugen).")
     return Partition(labels, names, warnings)
 
 

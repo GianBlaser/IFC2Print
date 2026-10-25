@@ -26,7 +26,8 @@ def _actions(db, ruleset_name):
 def test_seed_complete(db):
     assert db.rule_sets() == ["1:500", "1:200", "1:100", "1:50"]
     for m in db.rule_sets():
-        assert len(db.rules(m)) == 24                                  # inkl. IfcFooting (Fundament)
+        # inkl. IfcFooting (Fundament); ausser 1:50 auch IfcBeam.LINTEL (Storenkasten-Einlage als Quader)
+        assert len(db.rules(m)) == (24 if m == "1:50" else 25)
     assert any(p["name"] == "Prusa MK4" for p in db.profiles())
     assert any(m["name"] == "PLA" for m in db.materials())
 
@@ -43,6 +44,8 @@ def test_default_rule_content(db):
     assert rules["IfcColumn"] == "verdicken"
     assert rules["IfcCovering"] == "entfernen"
     assert rules["IfcCovering.CLADDING"] == "behalten"
+    assert rules["IfcBeam.LINTEL"] == "fuellen"
+    assert "IfcBeam.LINTEL" not in _actions(db, "1:50")          # 1:50: Storenkasten-Rinne als Detail behalten
 
 
 def test_volume_rule_set_without_stairs(db):

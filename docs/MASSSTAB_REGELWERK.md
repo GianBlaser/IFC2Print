@@ -73,7 +73,7 @@ das Druckerprofil bleibt die physikalische Grenze, das Regelwerk die gestalteris
 
 ## 5. Klassenregeln pro Massstab
 
-`b` behalten · `v` verdicken · `band` Brüstungsband (neu) · `–` entfernen · `F` Füller (Öffnungsmodus)
+`b` behalten · `v` verdicken · `f` fuellen (Quader aus der Bounding Box) · `band` Brüstungsband (neu) · `–` entfernen · `F` Füller (Öffnungsmodus)
 
 | IFC-Klasse | 1:500 | 1:200 | 1:100 | 1:50 | Kategorie |
 |---|---|---|---|---|---|
@@ -83,6 +83,7 @@ das Druckerprofil bleibt die physikalische Grenze, das Regelwerk die gestalteris
 | IfcFooting | – | – | – | – | Fundament |
 | IfcColumn | v | v | v | v | Stütze |
 | IfcBeam | v | v | v | v | Träger |
+| **IfcBeam.LINTEL** (neu) | f | f | f | v | Träger – Sturz, Storenkasten-Einlage: als Quader gedruckt, damit die Rinne der U-förmigen Einlage die Deckenunterseite nicht einkerbt; 1:50 behält das Detail |
 | **IfcChimney** (neu) | v | v | v | v | Dach |
 | IfcStair, IfcStairFlight | – | b | b | b | Treppe |
 | **IfcRamp, IfcRampFlight** (neu) | – | b | b | b | Treppe |
