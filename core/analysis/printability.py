@@ -56,5 +56,6 @@ def check(df: pd.DataFrame, scale: int, profile: dict | None = None) -> pd.DataF
     df["geometry"] = np.select([mesh_defective, np.isnan(bbox).any(axis=1), np.nanmin(np.nan_to_num(bbox, nan=np.inf), axis=1) < DEGENERATE_MM],
                                 ["defekt", "fehlt", "defekt"], default="ok")
     bbox_model = bbox / scale
-    df["fits_in_build_volume"] = (bbox_model <= build_volume).all(axis=1)   # NaN-Vergleich → False
+    df["fits_in_build_volume"] = ((bbox_model <= build_volume).all(axis=1) |   # gerade oder um 90° gedreht;
+                                  (bbox_model[:, [1, 0, 2]] <= build_volume).all(axis=1))   # NaN → False
     return df

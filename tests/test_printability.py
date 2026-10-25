@@ -106,8 +106,8 @@ def test_build_volume_default_profile():
 def test_build_volume_from_profile():
     profile = {"build_volume_x_mm": 20.0, "build_volume_y_mm": 100.0, "build_volume_z_mm": 100.0}
     df = check(_element_df(), 200, profile)
-    # Wand 25 mm in x passt nicht mehr, Stütze 1.5 x 1.5 x 15 mm schon
-    assert list(df["fits_in_build_volume"]) == [False, False, True, False]
+    # Wand 25 x 1.5 mm passt um 90° gedreht, Decke 40 x 30 mm in keiner Lage, Stütze 1.5 x 1.5 x 15 mm schon
+    assert list(df["fits_in_build_volume"]) == [True, False, True, False]
 
 
 def test_build_volume_oversized_element():

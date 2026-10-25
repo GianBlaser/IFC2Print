@@ -64,7 +64,8 @@ def report_context(ifc: IfcModel, df: pd.DataFrame, filename: str, *, scale: int
     meta = {"projekt": (projects[0].Name if projects else "") or Path(filename).stem, "datei": filename,
             "schema": ifc.schema, "storeys": storey_order(ifc, df), "real_m": overview.get("dimensions_m"),
             "model_mm": overview.get("model_mm"), "bauraum_mm": overview["bauraum_mm"],
-            "fits": overview.get("fits", True), "recommendation": overview.get("recommendation")}
+            "fits": overview.get("fits", True), "rotated": overview.get("rotated", False),
+            "recommendation": overview.get("recommendation")}
     return {"ifc_meta": meta, "scale": scale, "ruleset_name": ruleset_name, "profile": profile,
             "material": material, "angle": angle, "windows": windows, "doors": doors}
 
@@ -199,7 +200,8 @@ def _verdict(df: pd.DataFrame, meta: dict, settings: dict, result) -> list[dict]
     size = "×".join(f"{v:.0f}" for v in model) if model else "–"
     if meta.get("fits", True):
         fits = _verdict_row("ok", "Passt aufs Druckbett", size,
-                            "mm, Bauraum " + " × ".join(f"{v:.0f}" for v in bed) + " mm")
+                            "mm, Bauraum " + " × ".join(f"{v:.0f}" for v in bed) + " mm"
+                            + (", Modell 90° gedreht" if meta.get("rotated") else ""))
     else:
         recommendation = meta.get("recommendation")
         fits = _verdict_row("err", "Passt aufs Druckbett", size,

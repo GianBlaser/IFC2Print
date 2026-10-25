@@ -48,11 +48,22 @@ def _dimensions(ifc: IfcModel, df: pd.DataFrame, scale: int, build_volume: list[
     points = trimesh.transform_points(np.concatenate([ifc.geometry[g].verts for g in guids]), rot_matrix)
     real_m = np.ptp(points, axis=0) / 1000
     model_mm = real_m * 1000 / scale
-    factor = float(np.max(model_mm / build_volume))
+    factor, rotated = bed_fit(model_mm, build_volume)
     # Empfehlung: der nächste Massstab, bei dem das Modell aufs Bett passt (None = keine)
     fitting = [z for z in sorted(SCALES.values()) if z >= scale * factor]
-    return dict(dimensions_m=real_m.tolist(), model_mm=model_mm.tolist(), fits=factor <= 1.0,
+    return dict(dimensions_m=real_m.tolist(), model_mm=model_mm.tolist(), fits=factor <= 1.0, rotated=rotated,
                 recommendation=None if factor <= 1.0 or not fitting else fitting[0])
+
+
+def bed_fit(model_mm, bed_mm) -> tuple[float, bool]:
+    """Grösster Achsanteil am Bauraum und ob das Modell dafür um 90° (X ↔ Y) gedreht liegt.
+
+    Das Bett dreht sich nicht, aber das Modell darf quer drauf liegen: es zählt die bessere Lage,
+    bei Gleichstand die gerade.
+    """
+    (mx, my, mz), (bx, by, bz) = model_mm, bed_mm
+    straight, rotated = max(mx / bx, my / by, mz / bz), max(my / bx, mx / by, mz / bz)
+    return (float(rotated), True) if rotated < straight else (float(straight), False)
 
 
 def _storey_summary(ifc: IfcModel, df: pd.DataFrame) -> list[dict]:

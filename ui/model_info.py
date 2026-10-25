@@ -9,6 +9,7 @@ Ausgabe: die Modellkarte im Blatt 01; content.refresh() zeichnet sie neu
 
 from nicegui import ui
 
+from core.output.model_info import bed_fit
 from ui.bed_iso import COLORS, bed_iso_svg
 from ui.texts import FIT_MARK, TIGHT_THRESHOLD
 from ui.widgets import button, popup, tag
@@ -33,7 +34,10 @@ class ModelInfo:
             tag("p", "Keine Geometrie auswertbar.", "hint")
             return
         model, print_bed = u["model_mm"], u["bauraum_mm"]
-        severity = fit_class(max(m / b for m, b in zip(model, print_bed)))
+        fraction, rotated = bed_fit(model, print_bed)
+        severity = fit_class(fraction)
+        if rotated:                                  # quer aufs Bett: gezeichnet wird die Lage, die passt
+            model = [model[1], model[0], model[2]]
         _, side, _, line = COLORS[severity]
         with ui.element("div").classes("modellkarte"):
             tag("span", FIT_MARK[severity], f"urteil {severity}")
@@ -47,7 +51,7 @@ class ModelInfo:
                     tag("span", f"Bauraum {self.s.profile}")
                 with tag("span"):
                     tag("i").style(f"background: {side}; border: 1px solid {line}")
-                    tag("span", f"Modell {self.s.scale}")
+                    tag("span", f"Modell {self.s.scale}" + (" · 90° gedreht" if rotated else ""))
             x, y, z = u["dimensions_m"]
             with ui.element("div").classes("modell-fakten"):
                 for value, word in ((str(len(self.s.df)), "Bauteile"), (str(len(u["storeys"])), "Geschosse"),

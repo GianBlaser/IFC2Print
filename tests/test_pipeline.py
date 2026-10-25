@@ -118,6 +118,14 @@ def test_model_overview(mfh):
     assert large["fits"] is False and large["recommendation"] > 50
 
 
+def test_bed_fit_rotates_when_only_crosswise_fits():
+    """Das Modell darf quer aufs Bett: 180 × 245 auf 250 × 220 passt gedreht, 245 × 180 schon gerade."""
+    from core.output.model_info import bed_fit
+    assert bed_fit((180, 245, 100), (250, 220, 220)) == pytest.approx((0.98, True))
+    assert bed_fit((245, 180, 100), (250, 220, 220)) == pytest.approx((0.98, False))
+    assert bed_fit((100, 100, 100), (200, 200, 200)) == (0.5, False)   # Gleichstand bleibt gerade
+
+
 def test_thicken_and_fill_take_effect(mfh):
     """Mit «verdicken» für alle Wände und «fuellen» für Treppen wächst das Volumen; Kennzahlen zählen es."""
     ifc, _ = mfh

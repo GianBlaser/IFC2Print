@@ -13,6 +13,7 @@ from config import SCALES
 from core import pipeline
 from core.ifc.model import IfcModel
 from core.output import report
+from core.output.model_info import bed_fit
 from core.output.report_data import build_report_data
 
 PRINT_STATUSES = ("druckbar", "kritisch", "nicht_druckbar")   # Druckbarkeitsstatus der gedruckten Bauteile
@@ -70,7 +71,7 @@ def scale_suggestion(overview: dict, current: int, margin: float = 0.9) -> tuple
         if denominator <= current:
             continue
         model = [mm * current / denominator for mm in overview["model_mm"]]
-        if all(m <= margin * b for m, b in zip(model, overview["bauraum_mm"])):
+        if bed_fit(model, overview["bauraum_mm"])[0] <= margin:
             return name, model[2]
     return None
 

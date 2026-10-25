@@ -157,3 +157,9 @@ def test_verdict_bed_too_small(report_context):
     assert watertight["level"] == "ok"
     assert (fits["level"], fits["sub"]) == ("err", "Massstab 1:500 würde passen")
     assert np.isclose(sum(float(d["width"].rstrip("%")) for d in data.decisions), 100.0, atol=0.01)
+
+
+def test_verdict_fits_only_rotated(report_context):
+    report_context["ifc_meta"].update(fits=True, rotated=True)
+    fits = build_report_data(_df(), report_context, _result(leaky=[]), []).verdict[2]
+    assert fits["level"] == "ok" and fits["sub"].endswith(", Modell 90° gedreht")
