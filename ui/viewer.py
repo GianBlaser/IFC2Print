@@ -2,7 +2,8 @@
 
 Zweck:   Zeigt die Geometrie, die fertig aus core.output.preview kommt (samt Farben). Hier wird nur angezeigt:
          Modus (IFC / Status / STL), Geschosse auseinander, Geschoss-Fokus und gewähltes Geschoss (andere abgedunkelt,
-         oranger Umriss), Etikett am gewählten Bauteil, Aufbau-Animation beim Erzeugen und die Kamera. Das Druckbett
+         oranger Umriss), Etikett am gewählten Bauteil, Aufbau-Animation beim Erzeugen und die Kamera (Blickpunkt auf
+         der Gebäudemitte samt «auseinander», im Bild mittig im freien Bereich neben den Blättern). Das Druckbett
          zeichnet ui/viewer_bed.py, die GLB-Dateien liefert ui/viewer_blobs.py aus und die kleinen JavaScript-Ergänzungen
          stehen in ui/viewer_js.py.
 Eingabe: GLB-Bytes je Geschoss (Session.preview, Session.selection_preview), Kameramasse (Session.frame), Theme;
@@ -22,8 +23,6 @@ EXPLODE_FACTOR = 1.0
 OPACITY_IFC, OPACITY_FOCUS, OPACITY_DIMMED = 0.05, 0.22, 0.015
 # STAT/STL mit gewähltem Geschoss: andere Geschosse × Faktor, ihre «nicht gedruckt»-Flächen auf feste Deckkraft
 DIM_FACTOR, DIM_GHOST_OPACITY = 0.10, 0.025
-# Bauteil-Fokus: seitliche Verschiebung als Anteil der Kameradistanz (Bauteil rechts neben den Blättern)
-DISPLAY_SHIFT = 0.7
 
 
 def belongs_to(name: str, storey: str) -> bool:
@@ -54,6 +53,7 @@ class Viewer:
         self._dimmed = self._outlined = False          # im Browser abgedunkelt bzw. Umriss vorhanden
         self._z_bottom = 0.0
         self._height = 0.0
+        self._shown_center_z: float | None = None        # Höhe des Blickpunkts im Browser (None = noch kein frame)
         ui.timer(0.5, lambda: self.scene.client.run_javascript(viewer_js.scene_setup(self.scene.id)), once=True)
 
     # --- Inhalte ----------------------------------------------------------
@@ -164,6 +164,7 @@ class Viewer:
             for obj, rank in plane:
                 obj.visible(visible in ("ifc", "status") if mode == "selection" else mode == visible)
                 obj.move(0, 0, rank * step)
+        self._recenter()
 
     def set_mode(self, mode: str) -> None:
         self.mode = mode
@@ -246,6 +247,22 @@ class Viewer:
         self.bed.set_theme(theme)
 
     # --- Kamera -------------------------------------------------------------
+    # Seitlich verschiebt nichts mehr: viewer_js.scene_setup legt die Bildmitte in den freien Bereich neben den Blättern.
+
+    def _center_z(self) -> float:
+        """Höhe der Gebäudemitte in der sichtbaren Ebene, samt «auseinander»-Versatz des obersten Geschosses (Teils)."""
+        layer = self._visible_layer()
+        top_rank = max((rank for _, rank in self._scene_layers[layer]), default=0)
+        return self._z_bottom + (self._height + top_rank * self._step(layer)) / 2
+
+    def _recenter(self) -> None:
+        """Kamera samt Drehpunkt weich auf die neue Gebäudemitte heben bzw. senken (Drehung und Zoom bleiben)."""
+        if self._shown_center_z is None:
+            return
+        z = self._center_z()
+        if abs(z - self._shown_center_z) > 0.01:
+            self.scene.client.run_javascript(viewer_js.shift_target(self.scene.id, z - self._shown_center_z))
+            self._shown_center_z = z
 
     def frame(self, center, size: float, height: float, print_bed_mm: tuple[float, float], theme: str) -> None:
         """Kamera auf das Modell richten, Druckbett-Gitter mit Bauraumrahmen darunter legen."""
@@ -255,17 +272,14 @@ class Viewer:
         self.bed.draw(x, y, z, print_bed_mm)
         self.theme(theme)
         d = max(size, 30) * 1.15
-        # Blickpunkt leicht nach links versetzt: das Modell steht rechts neben den Blättern
-        self.scene.move_camera(x=x + d * 0.55, y=y - d * 0.95, z=z + d * 0.7,
-                               look_at_x=x - size * 0.22, look_at_y=y, look_at_z=z + height * 0.4, duration=0.8)
+        zc = self._shown_center_z = self._center_z()
+        self.scene.move_camera(x=x + d * 0.55, y=y - d * 0.95, z=zc + d * 0.7,
+                               look_at_x=x, look_at_y=y, look_at_z=zc, duration=0.8)
 
-    def display(self, lo, hi) -> None:
-        """Kamera auf ein Bauteil richten (Box im Modellmass, ohne «auseinander»-Versatz).
-
-        Kamera und Blickpunkt rücken quer zur Blickrichtung nach links: das Bauteil (mit Etikett) steht so rechts
-        neben Blatt 03 statt verdeckt in der Bildmitte."""
+    def display(self, lo, hi, storey: str = "") -> None:
+        """Kamera auf ein Bauteil richten (Box im Modellmass, ohne «auseinander»-Versatz; ``storey`` rechnet ihn ein)."""
         center = [(float(a) + float(b)) / 2 for a, b in zip(lo, hi)]
+        center[2] += self._rank.get(storey, 0) * self._step("status")
         d = max(max(float(b) - float(a) for a, b in zip(lo, hi)), 8.0) * 3.0
-        sx, sy = -DISPLAY_SHIFT * d * 0.857, -DISPLAY_SHIFT * d * 0.514     # Bildschirm-rechts = (0.857, 0.514)
-        self.scene.move_camera(x=center[0] + d * 0.6 + sx, y=center[1] - d + sy, z=center[2] + d * 0.7,
-                               look_at_x=center[0] + sx, look_at_y=center[1] + sy, look_at_z=center[2], duration=0.6)
+        self.scene.move_camera(x=center[0] + d * 0.6, y=center[1] - d, z=center[2] + d * 0.7,
+                               look_at_x=center[0], look_at_y=center[1], look_at_z=center[2], duration=0.6)

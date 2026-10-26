@@ -1,13 +1,15 @@
-"""JavaScript-Bausteine für den 3D-Viewer: Licht und Hintergrund, Kantenlinien, Aufbau-Animation, Abdunkeln,
-Umriss des gewählten Geschosses und Bauteil-Etikett.
+"""JavaScript-Bausteine für den 3D-Viewer: Licht und Hintergrund, Bildmitte im freien Bereich, Nachführen der
+Gebäudemitte, Kantenlinien, Aufbau-Animation, Abdunkeln, Umriss des gewählten Geschosses und Bauteil-Etikett.
 
 Zweck:   Hier steht JavaScript, weil die NiceGUI-Szene (ui.scene, three.js) diese Dinge nicht selbst anbietet und sie nur
          im Browser direkt am three.js-Objekt einzustellen sind: durchsichtiger Hintergrund mit kräftigerem Licht,
-         Bauteilkanten als Linien, eine Schnittebene für die Aufbau-Animation, die Deckkraft ganzer Geschosse, ein
-         Rahmen um ein Geschoss und ein HTML-Etikett, das einem Punkt im Modell folgt. Jeder Baustein ist eine
-         Python-Funktion, die den fertigen JavaScript-Text liefert. In den Vorlagen füllt Python die Werte in {id}, {z}
-         usw. ein; ein doppeltes {{ }} ergibt ein einfaches JavaScript-Klammerpaar.
-Eingabe: ID der Szene (``scene.id``), je nach Baustein Objekt-IDs, Faktor, Schnitthöhe z oder Ankerpunkt mit Texten
+         die Bildmitte in der Mitte des freien Bereichs neben Blatt, Kopfzeile und unterer Leiste, ein weiches Heben
+         der Kamera auf die Gebäudemitte, Bauteilkanten als Linien, eine Schnittebene für die Aufbau-Animation, die
+         Deckkraft ganzer Geschosse, ein Rahmen um ein Geschoss und ein HTML-Etikett, das einem Punkt im Modell folgt.
+         Jeder Baustein ist eine Python-Funktion, die den fertigen JavaScript-Text liefert. In den Vorlagen füllt
+         Python die Werte in {id}, {z} usw. ein; ein doppeltes {{ }} ergibt ein einfaches JavaScript-Klammerpaar.
+Eingabe: ID der Szene (``scene.id``), je nach Baustein Objekt-IDs, Faktor, Schnitthöhe z, Höhenversatz oder Ankerpunkt
+         mit Texten
 Ausgabe: JavaScript-Text, den ui/viewer.py mit ``scene.client.run_javascript`` an den Browser schickt
 """
 
@@ -16,9 +18,15 @@ import json
 EDGE_ANGLE_DEG = 20      # Grad: flachere Knicke (Rundungen, Triangulierung) bleiben ohne Linie
 OUTLINE_COLOR = 0xFF6B2C  # oranger Umriss des gewählten Geschosses
 GHOST_MAX_OPACITY = 0.5   # darunter gilt eine Fläche als «nicht gedruckt» (Geist, Deckkraft ≈ 0.18)
+CENTER_SMOOTH_MS = 120    # Zeitkonstante, mit der die Bildmitte dem freien Bereich nachgleitet
+SHIFT_MS = 400            # Dauer, in der die Kamera auf eine neue Gebäudemitte gleitet
 
 # Einmal nach dem Laden: transparenter Hintergrund (das CSS-Theme scheint durch) und
 # kräftigeres Licht. NiceGUI setzt viel Umgebungslicht – das wäscht die Farben aus.
+# Bildmitte: setViewOffset verschiebt nur die Projektion, so steht der Blickpunkt (Gebäudemitte) in der Mitte des
+# freien Bereichs – rechts vom offenen Blatt (sonst von der Rail), unter der Kopfzeile, über der unteren Leiste.
+# Drehpunkt, Klicks und Etikett bleiben dabei stimmig. Neu gemessen wird, wenn Blatt, Kopfzeile oder Viewer die
+# Grösse ändern; die Bildmitte gleitet dann weich nach.
 _SCENE_SETUP = """
 const v = getElement({id});
 if (v && v.renderer) {{
@@ -27,6 +35,57 @@ if (v && v.renderer) {{
     if (c.isAmbientLight) c.intensity = 1.1;
     if (c.isDirectionalLight) {{ c.intensity = 2.2; c.position.set(-0.6, -0.8, 1.6); }}
   }});
+  const app = v.$el.closest(".app");
+  if (app && !v.centering) {{
+    const c = v.centering = {{ x: 0, y: 0, tx: 0, ty: 0, frame: 0, last: 0 }};
+    const rect = (sel) => app.querySelector(sel)?.getBoundingClientRect();
+    const step = (now) => {{
+      const k = 1 - Math.exp(-(now - c.last) / {smooth_ms});
+      c.last = now;
+      c.x += (c.tx - c.x) * k;
+      c.y += (c.ty - c.y) * k;
+      const done = Math.abs(c.tx - c.x) < 0.5 && Math.abs(c.ty - c.y) < 0.5;
+      if (done) {{ c.x = c.tx; c.y = c.ty; }}
+      const w = v.$el.clientWidth, h = v.$el.clientHeight;
+      v.camera.setViewOffset(w, h, -c.x, -c.y, w, h);
+      v.camera.updateProjectionMatrix();
+      c.frame = done ? 0 : requestAnimationFrame(step);
+    }};
+    const measure = () => {{
+      const own = v.$el.getBoundingClientRect();
+      const left = (rect(".sheets .sheet.active") ?? rect(".rail"))?.right ?? own.left;
+      const right = rect(".ansicht")?.left ?? own.right;
+      const top = rect(".kopf")?.bottom ?? own.top, bottom = rect(".unten-leiste")?.top ?? own.bottom;
+      c.tx = (left + right) / 2 - (own.left + own.width / 2);
+      c.ty = (top + bottom) / 2 - (own.top + own.height / 2);
+      if (!c.frame) {{ c.last = performance.now(); c.frame = requestAnimationFrame(step); }}
+    }};
+    const observer = new ResizeObserver(measure);
+    for (const el of [v.$el, app.querySelector(".sheets"), app.querySelector(".kopf")]) if (el) observer.observe(el);
+  }}
+}}
+"""
+
+# Gebäudemitte in der Höhe nachführen («auseinander», Moduswechsel): Kamera, Drehpunkt und NiceGUIs Blickpunkt
+# gleiten gemeinsam um dz – Drehung und Zoom des Nutzers bleiben. Eine neue Verschiebung übernimmt den Rest der
+# laufenden; ein Kameraflug von NiceGUI (move_camera) hat Vorrang, er zielt schon auf die richtige Mitte.
+_SHIFT_TARGET = """
+const v = getElement({id});
+if (v && v.controls) {{
+  const total = {dz} + (v.shift?.rest ?? 0), start = performance.now(), s = v.shift = {{ rest: total }};
+  let moved = 0;
+  const step = (now) => {{
+    if (v.shift !== s) return;
+    if (v.camera_tween?.isPlaying()) {{ v.shift = null; return; }}
+    const t = Math.min(1, (now - start) / {ms}), dz = total * t * t * (3 - 2 * t) - moved;
+    moved += dz;
+    s.rest = total - moved;
+    v.camera.position.z += dz;
+    v.controls.target.z += dz;
+    v.look_at.z += dz;
+    if (t < 1) requestAnimationFrame(step); else v.shift = null;
+  }};
+  requestAnimationFrame(step);
 }}
 """
 
@@ -145,8 +204,14 @@ if (v && v.camera) {{
 
 
 def scene_setup(scene_id: int) -> str:
-    """Hintergrund durchsichtig machen und das Licht der Szene kräftiger einstellen."""
-    return _SCENE_SETUP.format(id=scene_id)
+    """Hintergrund durchsichtig machen, das Licht kräftiger einstellen und die Bildmitte dem freien Bereich folgen
+    lassen."""
+    return _SCENE_SETUP.format(id=scene_id, smooth_ms=CENTER_SMOOTH_MS)
+
+
+def shift_target(scene_id: int, dz: float) -> str:
+    """Kamera samt Drehpunkt weich um ``dz`` [mm, Modellmass] heben (negativ = senken)."""
+    return _SHIFT_TARGET.format(id=scene_id, dz=f"{dz:.3f}", ms=SHIFT_MS)
 
 
 def build_up(scene_id: int, z: float | None) -> str:

@@ -135,7 +135,8 @@ class SheetElements:
         if not multi_select and self.selection_guids == [guid] and self.page.is_alive():
             box = await run.io_bound(self.s.element_box, guid)
             if box is not None and self.page.is_alive():
-                self.page.viewer.display(*box)
+                row = self.s.df[self.s.df["guid"] == guid]
+                self.page.viewer.display(*box, row.iloc[0].storey if not row.empty else "")
 
     async def _toggle_selection(self, guid: str, multi_select: bool) -> None:
         if multi_select:
