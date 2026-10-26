@@ -9,6 +9,8 @@ Ausgabe: Konstanten, die ui/page.py, die Kopfzeile (header.py) und die Blätter 
 
 from pathlib import Path
 
+from config import QUALITIES
+
 THEME_CSS = (Path(__file__).parent / "theme.css").read_text(encoding="utf-8")
 LOGO_SVG = (Path(__file__).parent.parent / "assets" / "logo.svg").read_text(encoding="utf-8")
 FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
@@ -33,14 +35,8 @@ LEGEND = (("ok", "OK", "druckbar"), ("warn", "Prüfen", "kritisch"), ("err", "Ni
           ("skip", "Weg", "nicht gedruckt"))
 
 # --- 02 Setup (Kopfzeile, Variante «Schritte») -------------------------------------------------
-# Kurzbeschreibung je Massstab (Tooltip am Feld «Massstab»)
-SCALE_NOTE = {
-    "1:500": "Volumenmodell: Wände min. 0.8 mm, Laibung nur aussen, keine Treppen und Geländer, keine Steckverbinder. Auskragungen brauchen Stützmaterial.",
-    "1:200": "Standard: Wände min. 1.2 mm, Treppen, Geländer als 0.8-mm-Band.",
-    "1:100": "Detail: tiefere Laibungen (0.8 mm), Dachaufbau.",
-    "1:50": "Ausschnitt: einzelne Geschosse wählen; Qualität «auto» wechselt bei grossen Modellen auf 0.8 mm.",
-}
-QUALITY_NOTE = "Fein = 0.4 mm Voxel, Entwurf = 0.8 mm, Auto = fein, bei grossen Modellen Entwurf"
+QUALITY_NOTE = (f"Fein = {QUALITIES['fein']:g} mm Voxel, Entwurf = {QUALITIES['entwurf']:g} mm, "
+                "Auto = fein, bei grossen Modellen Entwurf")
 ALIGN_NOTE = "Automatisch ausrichten: dominante Wandrichtung achsparallel"
 CONNECTOR_NOTE = "Zapfen und Löcher zwischen den Geschossteilen"
 # Öffnungen: Knopftext und Piktogramm 44 × 18 px aus Rechtecken (links, oben, Breite, Höhe, ausgespart)

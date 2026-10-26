@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from core.analysis.ruleset import ScaleParameters
 from db.database import Database
 
 
@@ -258,3 +259,25 @@ def test_german_database_is_migrated_to_english(file_path):
     run = db.export_runs()[0]
     assert run["ifc_name"] == "alt.ifc" and run["scale"] == 200 and run["ruleset_name"] == "1:200"
     db.close()
+
+
+def test_scale_parameters_follow_the_seed(file_path):
+    """Die Massstab-Parameter kommen bei jedem Start aus massstaebe.csv – eine ältere Datenbank behält keine alten Werte."""
+    db = Database(file_path)
+    with db._lock, db._conn:
+        db._conn.execute("UPDATE scale SET min_thickness_wall_mm = 9.9 WHERE ruleset_name = '1:200'")
+    db.close()
+    db = Database(file_path)
+    assert db.scale_parameters("1:200")["min_thickness_wall_mm"] == ScaleParameters.default("1:200").min_thickness_wall_mm
+    db.close()
+
+
+def test_seed_skips_only_the_reason_column(db, tmp_path):
+    """Nur «reason» gibt es bloss in der CSV; jede andere fehlende Spalte scheitert laut (_add_columns vergessen)."""
+    seed = tmp_path / "material.csv"
+    seed.write_text("name,density_g_cm3,price_chf_kg,reason\nTest-PLA,1.24,25.0,Begründung\n", encoding="utf-8")
+    db._seed("material", seed)
+    assert "Test-PLA" in {m["name"] for m in db.materials()}
+    seed.write_text("name,density_g_cm3,price_chf_kg,unbekannt\nTest-PETG,1.27,28.0,x\n", encoding="utf-8")
+    with pytest.raises(sqlite3.OperationalError):
+        db._seed("material", seed)

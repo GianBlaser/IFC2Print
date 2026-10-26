@@ -1,0 +1,2 @@
+# Git-Hooks laufen in sh: Zeilenende LF, auch unter Windows (core.autocrlf)
+.githooks/* text eol=lf

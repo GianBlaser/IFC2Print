@@ -2,7 +2,7 @@
 
 Zweck:   Übersetzt Bauteiltabelle, Modell-Info, Ergebnis und Prüfpunkte in die Abschnitte des Übergabeblatts:
          Kopf, Kenndaten, Urteil, Druckteile (Seite 1), Regelwerk, Druckbarkeit je Klasse, Prüfpunkte (Seite 2)
-         und die Bauteiltabelle (Anhang). Ohne Ergebnis (Prüfbericht) entfallen Urteil, Druckteile und Modellbild.
+         sowie die wirksamen Regeln mit Begründung und die Bauteiltabelle (Anhang). Ohne Ergebnis (Prüfbericht) entfallen Urteil, Druckteile und Modellbild.
 Eingabe: Bauteiltabelle, Kontext der Sitzung (``report_context``), ``Result`` oder None, Prüfpunkte
 Ausgabe: ``ReportData`` (Texte, Zahlen, Farben, Modellbild als PNG) für core/output/report.py
 """
@@ -52,6 +52,7 @@ class ReportData:
     classes_more: str | None      # Schlusszeile, wenn es mehr Klassen gibt
     check_groups: list[dict]      # Prüfpunkte nach Stufe
     check_summary: str            # «6 PUNKTE · 2 MIT HANDLUNGSBEDARF»
+    rules: list[dict]             # Anhang: wirksame Regeln mit Begründung
     elements: list[dict]          # Anhang: alle Bauteile
 
 
@@ -89,6 +90,7 @@ def build_report_data(df: pd.DataFrame, context: dict, result, check_points: lis
         decisions=_decisions(df),
         **_classes(df),
         **_checks(check_points),
+        rules=_rules(df),
         elements=_elements(df, meta.get("storeys", [])),
     )
 
@@ -271,6 +273,20 @@ def _classes(df: pd.DataFrame) -> dict:
     more = (f"+ {len(rest)} weitere {'Klasse' if len(rest) == 1 else 'Klassen'} "
             f"({count_text(sum(r['n'] for r in rest))} Bauteile) – siehe Anhang") if rest else None
     return {"classes": rows[:MAX_CLASSES], "classes_more": more}
+
+
+def _rules(df: pd.DataFrame) -> list[dict]:
+    """Die im Modell wirksamen Regeln mit Anzahl Bauteile und Begründung, die häufigste zuerst.
+
+    Gezählt werden nur Bauteile, über die die Regel entschieden hat: Bei Umgebung, Ausreissern, Ausnahmen
+    und abgewählten Geschossen leert pipeline.analyse die Begründung.
+    """
+    if "reason" not in df:
+        return []
+    given = df[_rule_given(df) & (df["reason"] != "")].groupby("rule")
+    counts = given.size().sort_values(ascending=False, kind="stable")
+    reasons = given["reason"].first()
+    return [{"rule": key, "count": count_text(int(n)), "reason": reasons[key]} for key, n in counts.items()]
 
 
 def level(point: dict) -> str:

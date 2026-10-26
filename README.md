@@ -60,6 +60,8 @@ Virtuelle Umgebung anlegen und Abhängigkeiten installieren:
 | Windows | `python -m venv .venv`<br>`.venv\Scripts\activate`<br>`pip install -r requirements.txt` |
 | macOS / Linux | `python3 -m venv .venv`<br>`source .venv/bin/activate`<br>`pip install -r requirements.txt` |
 
+**Git-Hook (einmal je Klon):** `git config core.hooksPath .githooks`. Danach erzeugt der Pre-Commit-Hook `docs/REFERENZ.md` neu und nimmt sie in den Commit auf, sobald `config.py`, `core/analysis/ruleset.py`, die Seed-CSVs oder `scripts/reference.py` im Commit sind. Haben diese Quellen ungestagte Änderungen, bricht er ab, damit die Referenz nicht mehr enthält als der Commit.
+
 **PDF-Report (WeasyPrint):** WeasyPrint setzt den Report aus einem HTML-Template und braucht dafür die Textbibliothek Pango.
 Unter macOS (`brew install pango`) und Linux (Paket `libpango-1.0-0`) genügt die Paketverwaltung. Unter Windows kommt Pango aus MSYS2:
 
@@ -202,6 +204,7 @@ Die Unterordner von `core/` folgen den Verarbeitungsschritten; jede `__init__.py
 | `scripts/baseline_metrics.py` | Regressions-Netz: friert Qualitätsmetriken des STL-Outputs ein (`--save`) und vergleicht spätere Läufe (`--compare`, mit `--all` für alle Testmodelle) |
 | `scripts/wall_thicknesses.py` | Misst im erzeugten Gitter die sichtbare Wanddicke je Wandtyp und zählt die Öffnungen |
 | `scripts/diagnostics.py` | Schnelle Diagnose eines unbekannten IFC ohne Voxelisieren |
+| `scripts/reference.py` | Erzeugt `docs/REFERENZ.md` aus `config.py`, `ScaleParameters` und den Seed-CSVs (`--check`: nur prüfen) |
 
 ---
 
@@ -213,7 +216,7 @@ Jede IFC-Klasse erhält genau eine von fünf Aktionen:
 |---|---|
 | `behalten` | Das Bauteil wird gedruckt, wie es im IFC ist. |
 | `verdicken` | Einzelbauteile (Stützen, Träger) werden bei Bedarf allseitig auf die Mindestwand aufgedickt. |
-| `fuellen` | Statt der Geometrie wird ein Füllquader aus der Bounding Box gedruckt (Verglasung). Der Quader liegt mittig, seine dünnste Achse ist mindestens die Mindestwand. |
+| `fuellen` | Statt der Geometrie wird ein Füllquader aus der Bounding Box gedruckt (Sturz und Storenkasten-Einlage, `IfcBeam.LINTEL`). Der Quader liegt mittig, seine dünnste Achse ist mindestens die Mindestwand. |
 | `band` | Geländer: eine dünne Scheibe vom Boden bis zur Geländerhöhe (Dicke `min_thickness_railing_mm` des Massstabs). |
 | `entfernen` | Das Bauteil wird nicht gedruckt. |
 
@@ -225,7 +228,9 @@ Ein Regelschlüssel ist die IFC-Klasse (`IfcCovering`) oder die Klasse mit Prede
 - **Aggregate:** Teile eines Ganzen (Platten und Pfosten eines `IfcRoof`, Läufe einer `IfcStair`, `IfcBuildingElementPart` einer Wand) folgen der Regel ihres Ganzen, sofern es eine hat. Feiner steuert ein Schlüssel «Ganzes/Teil», z.B. `IfcRoof/IfcMember`.
 - **Sichtbar statt still:** Das Regelblatt listet die Klassen des Modells ohne eigene Regel, mit der Regel, die stattdessen gilt («wie IfcSlab» bzw. «keine Regel»). Ein Klick legt die Regel an. Blatt 05 und der Prüfbericht nennen geerbte Regeln, Teile, die ihrem Ganzen folgen, und Klassen ohne Regel.
 
-Es gibt ein Regelset je Massstab (1:500, 1:200, 1:100, 1:50). Regeln und Massstab-Parameter (Mindestdicke Wand und Geländer, Laibungstiefe, Restkern, Qualitäten, Steckverbinder erlaubt, Öffnungs-Defaults) liegen als Seed in `db/seed/regeln.csv` und `db/seed/massstaebe.csv` und werden in SQLite gespeichert; eigene Änderungen bleiben erhalten.
+Es gibt ein Regelset je Massstab (1:500, 1:200, 1:100, 1:50). Regeln und Massstab-Parameter (Mindestdicke Wand und Geländer, Laibungstiefe, Restkern, Qualitäten, Steckverbinder erlaubt, Öffnungs-Defaults) liegen als Seed in `db/seed/regeln.csv` und `db/seed/massstaebe.csv` und werden in SQLite gespeichert; eigene Regeln bleiben erhalten. Die Massstab-Parameter sind in der App nicht änderbar und werden bei jedem Start aus der CSV übernommen.
+
+**Begründungen:** Jede Standardregel und jeder Massstab hat in der Spalte `reason` der Seed-CSVs eine Begründung (`core.analysis.ruleset.rule_reason`). Sie bleibt in der CSV, weil sie zum Standard gehört: Das Regelblatt zeigt sie im Tooltip, der PDF-Anhang unter «Regeln dieses Modells», eine abweichende Regel heisst «Eigene Regel (Standard: …)». Alle Regeln und Parameter auf einen Blick: [docs/REFERENZ.md](docs/REFERENZ.md).
 
 ### Umgebung
 
@@ -348,7 +353,7 @@ Wanddicken im erzeugten Gitter (`scripts/wall_thicknesses.py`, NEST, Qualität f
 | Umgebung | Virtuelle Umgebung (venv) |
 | Versionsverwaltung | Git, GitHub |
 | Editor | VS Code |
-| Tests | pytest, 304 Tests (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte) |
+| Tests | pytest (Architektur, core, db, Oberfläche mit simuliertem Nutzer, Skripte, Dokumentation) |
 
 **Entwicklungsverlauf:** Dieses Repository ist der bereinigte Abgabestand vom 23.10.2026. Entwickelt wurde vom 21.09. bis 22.10.2026 im privaten Repository HSLU_GB_26 (125 Commits, mehrere Branches). Der Verlauf kann auf Anfrage eingesehen werden.
 
@@ -398,6 +403,13 @@ Bezug zu den Vorgaben des Leistungsnachweises:
 - Doppelte Geschossnamen (zwei Gebäude mit je einem «EG») werden mit dem Gebäudenamen unterschieden, notfalls nummeriert; jedes wird ein eigenes Teil.
 - Die Ausgabeziele Lasercut und 3MF Farbe sind nicht umgesetzt (in der unteren Leiste als «bald» angelegt).
 
+### Offene Punkte
+
+- **Relief der Vorhangfassade** (Pfosten-/Riegelraster bei 1:100 und 1:50, Felder vertieft statt Stäbe vorstehend, damit ohne Stützmaterial druckbar): war umgesetzt und wurde auf Wunsch wieder entfernt. Erkenntnis: An schrägen Fassaden zerfällt ein 1 Voxel dicker Restkern (nur Kantenkontakt) in Streifen.
+- **Raum-Ausschnitt** für 1:50: Clipbox aus `IfcSpace`, heute nur Geschosswahl.
+- **Sockel oder Grundplatte** für 1:500.
+- **Weitere Kategorien** bei 1:100 und 1:50 (Sonnenschutz, freie Stahlbauteile, Möblierung): bewusst zurückgestellt.
+
 ---
 
 ## Projektstruktur
@@ -427,10 +439,11 @@ IFC2Print/
 │  ├─ schema.sql
 │  └─ seed/                   # regeln.csv, massstaebe.csv, profile.csv, material.csv
 ├─ ui/                        # NiceGUI-Oberfläche: page.py, header.py, ein Blatt je sheet_*.py, viewer …
-├─ scripts/                   # generate_stl, baseline_metrics, wall_thicknesses, diagnostics
-├─ tests/                     # pytest (Architektur, core, db, Oberfläche, Skripte)
+├─ scripts/                   # generate_stl, baseline_metrics, wall_thicknesses, diagnostics, reference
+├─ tests/                     # pytest (Architektur, core, db, Oberfläche, Skripte, Dokumentation)
 ├─ testdaten/                 # IFC-Testmodelle
-├─ docs/                      # Massstab-Regelwerk
+├─ docs/                      # REFERENZ.md (erzeugt)
+├─ .githooks/                 # pre-commit: docs/REFERENZ.md neu erzeugen
 └─ output/                    # erzeugte Dateien (nicht im Repository)
 ```
 
@@ -440,8 +453,8 @@ IFC2Print/
 
 ## Weitere Dokumente
 
-Die Dokumente in `docs/` beschreiben frühere Arbeitsstände und verwenden teilweise noch die deutschen Datei- und Funktionsnamen von vor Oktober 2026.
-
 | Dokument | Inhalt |
 |---|---|
-| `docs/MASSSTAB_REGELWERK.md` | Konzept der Regelwerke je Massstab |
+| [docs/REFERENZ.md](docs/REFERENZ.md) | Alle Stellgrössen aus `config.py`, die Parameter je Massstab und die Klassenregeln mit Begründung, gegliedert nach Verfahrensschritt und mit Links in den Code. Erzeugt mit `python scripts/reference.py`, beim Commit automatisch über den Git-Hook (siehe Schnellstart). |
+
+Die Werte stehen im Code und in den Seed-CSVs, die Dokumentation erklärt und verweist darauf. Nennt das README einen Wert, dann mit dem Namen der Konstante («`MIN_WALL_MM` = 0.8 mm»). `tests/test_docs.py` prüft, dass die Referenz aktuell ist, dass solche Werte `config.py` entsprechen und dass jeder Pfad, jede Datei und jeder Name in Backticks im Code existiert. Spezifikationen für ein Arbeitspaket gehören nur so lange in `docs/`, bis das Paket umgesetzt ist; Begründungen wandern dann in die Seed-CSVs oder die Kommentare in `config.py`.

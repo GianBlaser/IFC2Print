@@ -40,8 +40,11 @@ CSV_HEADERS = {
 
 
 def elements_csv(df: pd.DataFrame) -> bytes:
-    """Bauteiltabelle als UTF-8-CSV mit BOM (öffnet in Excel korrekt), Kopfzeile deutsch (CSV_HEADERS)."""
-    return df.rename(columns=CSV_HEADERS).to_csv(index=False).encode("utf-8-sig")
+    """Bauteiltabelle als UTF-8-CSV mit BOM (öffnet in Excel korrekt), Kopfzeile deutsch (CSV_HEADERS).
+
+    Ohne ``reason``: die Begründung steht je Regel im PDF-Anhang, nicht tausendfach je Bauteil.
+    """
+    return df.drop(columns="reason", errors="ignore").rename(columns=CSV_HEADERS).to_csv(index=False).encode("utf-8-sig")
 
 
 def report_pdf(data: ReportData) -> bytes:

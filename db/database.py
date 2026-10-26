@@ -6,7 +6,9 @@ Ausgabe: Klasse Database mit Lese- und Schreibmethoden (Zeilen als dict)
 
 Beim Start wird das Schema angelegt und die Seed-CSVs in db/seed/ werden
 eingespielt. INSERT OR IGNORE ergänzt fehlende Standardeinträge, ohne
-Änderungen des Nutzers zu überschreiben. Die regeln.db selbst wird nicht eingecheckt.
+Änderungen des Nutzers zu überschreiben. Ausnahme: Die Massstab-Parameter (Tabelle scale) ändert der Nutzer nicht;
+sie werden jedes Mal aus massstaebe.csv übernommen, damit die CSV die einzige Quelle bleibt.
+Die regeln.db selbst wird nicht eingecheckt.
 """
 
 import csv
@@ -24,6 +26,8 @@ DEFAULT_PATH = _HERE / "regeln.db"
 _SEEDS = {"scale": "massstaebe.csv", "rule": "regeln.csv", "printer_profile": "profile.csv",
           "material": "material.csv"}
 _LOG = logging.getLogger(__name__)
+# Seed-Spalten ohne Gegenstück in der Datenbank: die Begründung gehört zum Standard (ruleset.rule_reason)
+_CSV_ONLY = {"reason"}
 # Deutsche Tabellen- und Spaltennamen bis Oktober 2026 → heutige Namen (für _migrate_to_english)
 _GERMAN_NAMES = {
     "regel": ("rule", {"regelset": "ruleset_name", "ifc_klasse": "ifc_class_name", "aktion": "action",
@@ -68,7 +72,7 @@ class Database:
                                                     "connectors": "INTEGER"})
             self._add_columns("printer_profile", {"clearance_mm": "REAL NOT NULL DEFAULT 0.20"})
             for table, file in _SEEDS.items():
-                self._seed(table, _HERE / "seed" / file)
+                self._seed(table, _HERE / "seed" / file, replace=table == "scale")
 
     def _migrate_to_english(self) -> None:
         """Datenbanken bis Oktober 2026 hatten deutsche Tabellen- und Spaltennamen: umbenennen, Daten bleiben."""
@@ -121,14 +125,16 @@ class Database:
         return self._conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                                   (name,)).fetchone() is not None
 
-    def _seed(self, table: str, csv_path: Path, only_rule_set: str | None = None) -> None:
+    def _seed(self, table: str, csv_path: Path, only_rule_set: str | None = None, replace: bool = False) -> None:
+        """CSV einspielen: fehlende Zeilen ergänzen, mit ``replace`` bestehende überschreiben."""
         with csv_path.open(encoding="utf-8", newline="") as f:
             rows = [{k: (None if v == "" else v) for k, v in z.items()} for z in csv.DictReader(f)
                       if only_rule_set is None or z["ruleset_name"] == only_rule_set]
         if rows:
-            columns = list(rows[0])
+            # Nur _CSV_ONLY wird übergangen: jede andere fehlende Spalte soll beim Start laut scheitern (_add_columns vergessen?)
+            columns = [s for s in rows[0] if s not in _CSV_ONLY]
             self._conn.executemany(
-                f"INSERT OR IGNORE INTO {table} ({', '.join(columns)}) VALUES ({', '.join('?' * len(columns))})",
+                f"INSERT OR {'REPLACE' if replace else 'IGNORE'} INTO {table} ({', '.join(columns)}) VALUES ({', '.join('?' * len(columns))})",
                 [tuple(z[s] for s in columns) for z in rows])
 
     def _all(self, sql: str, parameter: tuple = ()) -> list[dict]:

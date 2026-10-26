@@ -138,7 +138,7 @@ def test_detect_slope():
     assert not has_slope(steep, (0.3, 5.0))          # Mansarde 11°: Dach, kein Gefälle
 
 
-# --- Mindestdicke je Massstab (docs/MASSSTAB_REGELWERK.md, AP 2) -------------------------
+# --- Mindestdicke je Massstab (ScaleParameters.min_thickness_wall_mm) -------------------------
 
 @pytest.mark.parametrize("scale, real_m, expected_mm", [
     ("1:200", 0.30, 1.6),     # 1.5 mm → 4 Voxel: Originaldicke bleibt (gerundet)

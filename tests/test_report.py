@@ -67,3 +67,18 @@ def test_csv_without_index():
     rows = elements_csv(_example_df()).decode("utf-8-sig").splitlines()
     assert rows[0].startswith("klasse,")
     assert len(rows) == 4
+
+
+def test_csv_without_reason():
+    """Die Begründung steht je Regel im PDF-Anhang, nicht als englische Spalte je Bauteil in der CSV."""
+    df = _example_df().assign(reason=["Trägt die Decke.", "Zu dünn.", ""])
+    text = elements_csv(df).decode("utf-8-sig")
+    assert "reason" not in text.splitlines()[0] and "Trägt" not in text
+
+
+def test_rules_appendix_counts_only_rule_decisions(report_context):
+    """Bauteile, über die nicht die Regel entschieden hat (Umgebung, Ausnahme …: reason leer), zählen im Anhang nicht."""
+    df = pd.concat([_example_df()] * 2, ignore_index=True)
+    df["reason"] = ["Trägt die Decke.", "Zu dünn.", "", "", "Zu dünn.", ""]   # Zeile 3: IfcWall als Umgebung entfernt
+    rules = {r["rule"]: r for r in build_report_data(df, report_context, None, []).rules}
+    assert rules["IfcWall"]["count"] == "1" and rules["IfcColumn"]["count"] == "2"

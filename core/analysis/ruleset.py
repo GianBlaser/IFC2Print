@@ -5,7 +5,7 @@ Aktionen:
   verdicken  – Bauteil wird gedruckt und bei Bedarf allseitig auf die Mindestwand aufgedickt
   (Wände und Decken in Paketen werden bei beiden Aktionen auf ganze Voxel und die Mindestdicke gebracht,
   siehe core/packages/grouping.py)
-  fuellen    – statt der Geometrie wird ein Füllquader gedruckt (Fenster, Verglasung)
+  fuellen    – statt der Geometrie wird ein Füllquader gedruckt (Sturz)
   band       – Geländer: als dünne Scheibe vom Boden bis zur Geländerhöhe (core/voxels/band.py)
   entfernen  – Bauteil wird nicht gedruckt
 
@@ -23,6 +23,10 @@ IfcBuildingElementPart einer IfcWall) folgen der Regel ihres Ganzen, sofern es e
 ob ein Dach gedruckt wird, soll nicht davon abhängen, wie das Autorentool es zerlegt.
 Feiner steuert ein Schlüssel «Ganzes/Teil» (z.B. «IfcRoof/IfcMember»).
 Die Vererbungskette liefert core/ifc/schema.py.
+
+Die Begründung jeder Standardregel und jedes Massstabs steht in der Spalte ``reason`` der Seed-CSVs.
+Sie gehört zum Standard und wird nicht in die Datenbank kopiert: Weicht eine Regel vom Standard ab,
+heisst es «Eigene Regel» (``rule_reason``).
 
 Eingabe: Regelzeilen (db/seed/regeln.csv oder Datenbank) und die Bauteiltabelle (DataFrame)
 Ausgabe: Aktion, Kategorie und wirksamer Regelschlüssel je Bauteil (``Ruleset.classify``)
@@ -49,17 +53,23 @@ LEGACY_RULE_SETS = {"Standard 1:200": "1:200", "Volumen 1:500": "1:500"}
 
 @dataclass(frozen=True)
 class ScaleParameters:
-    """Was neben den Klassenregeln vom Massstab abhängt (Modellmass, mm). Defaults = 1:200."""
+    """Was neben den Klassenregeln vom Massstab abhängt (Modellmass, mm). Defaults = 1:200.
+
+    Das Druckerprofil bleibt die physikalische Grenze, der Massstab die gestalterische: Decken, Dächer und
+    Stützen richten sich nach der Mindestwand des Profils, Wände nach ``min_thickness_wall_mm``.
+    """
     ruleset_name: str = DEFAULT_SCALE
     denominator: int = 200
-    min_thickness_wall_mm: float = 1.2          # Wände (senkrechte Pakete); wirksam max(Profil, dieser Wert)
+    # Wände (senkrechte Pakete); wirksam max(Profil, dieser Wert). 0.8 mm = 2 Extrusionslinien, 1.2 mm = 3.
+    # Dickere Wände behalten ihre skalierte Dicke, gerundet auf ganze Voxel (core/packages/scaling.py).
+    min_thickness_wall_mm: float = 1.2
     min_thickness_railing_mm: float | None = 0.8   # Aktion «band»; None = keine Bänder
-    reveal_depth_mm: float = 0.4
-    min_core_reveal_mm: float = 0.4
-    qualities: tuple[str, ...] = ("fein", "entwurf", "auto")
-    quality_default: str = "fein"
-    connectors_allowed: bool = True
-    window_default: str = "vertieft"
+    reveal_depth_mm: float = 0.4                # Tiefe vertiefter Öffnungen, real rund 8 cm (1:500: ein Voxel)
+    min_core_reveal_mm: float = 0.4             # Wandkern, der hinter einer Laibung stehen bleibt
+    qualities: tuple[str, ...] = ("fein", "entwurf", "auto")   # wählbare Qualitäten (02 Setup), die übrigen gesperrt
+    quality_default: str = "fein"               # Qualität nach dem Wechsel, falls die bisherige nicht erlaubt ist
+    connectors_allowed: bool = True             # Steckverbinder zwischen den Geschossteilen möglich
+    window_default: str = "vertieft"            # Öffnungsmodus nach dem Wechsel: geschlossen, vertieft, ausgeschnitten
     door_default: str = "vertieft"
 
     @classmethod
@@ -99,6 +109,32 @@ def check_action(action: str) -> str:
     if action not in ACTIONS:
         raise ValueError(f"Unbekannte Aktion «{action}» – erlaubt: {', '.join(ACTIONS)}")
     return action
+
+
+@lru_cache(maxsize=None)
+def _standard_rules(scale: str) -> dict[str, tuple[str, str]]:
+    """Standardregeln eines Massstabs aus der Seed-CSV: Regelschlüssel → (Aktion, Begründung)."""
+    with DEFAULT_CSV.open(encoding="utf-8", newline="") as f:
+        return {z["ifc_class_name"]: (z["action"], z.get("reason") or "")
+                for z in csv.DictReader(f) if z["ruleset_name"] == scale}
+
+
+def rule_reason(scale: str, key: str, action: str) -> str:
+    """Begründung der Regel ``key``: die des Standards, solange ``action`` ihm entspricht, sonst «Eigene Regel»."""
+    if not key:
+        return ""
+    standard = _standard_rules(LEGACY_RULE_SETS.get(scale, scale)).get(key)
+    if standard is None:
+        return "Eigene Regel."
+    standard_action, reason = standard
+    return reason if action == standard_action else f"Eigene Regel (Standard: {standard_action})."
+
+
+@lru_cache(maxsize=None)
+def scale_reason(scale: str) -> str:
+    """Begründung eines Massstabs (Spalte ``reason`` der massstaebe.csv)."""
+    with SCALE_CSV.open(encoding="utf-8", newline="") as f:
+        return next((z.get("reason") or "" for z in csv.DictReader(f) if z["ruleset_name"] == scale), "")
 
 
 class Ruleset:
@@ -158,10 +194,14 @@ class Ruleset:
     def category(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "") -> str:
         return self.categories.get(self.rule_source(ifc_class, predefined_type, schema, aggregate), "Sonstiges")
 
-    def classify(self, df: pd.DataFrame, schema: str | None = None) -> pd.DataFrame:
-        """Ergänzt die Bauteiltabelle um action, is_printed, category und rule (gibt eine Kopie zurück).
+    def reason(self, key: str) -> str:
+        """Begründung der Regel ``key`` (siehe ``rule_reason``)."""
+        return rule_reason(self.scale, key, self.rules.get(key, ""))
 
-        ``rule``: der wirksame Regelschlüssel («» = keine Regel, entfernt). Mit ``schema`` gilt
+    def classify(self, df: pd.DataFrame, schema: str | None = None) -> pd.DataFrame:
+        """Ergänzt die Bauteiltabelle um action, is_printed, category, rule und reason (gibt eine Kopie zurück).
+
+        ``rule``: der wirksame Regelschlüssel («» = keine Regel, entfernt); ``reason``: seine Begründung. Mit ``schema`` gilt
         die Vererbung; eine Spalte ``aggregate`` (Klasse des Aggregats) aktiviert die Aggregat-Regel.
         """
         df = df.copy()
@@ -171,5 +211,6 @@ class Ruleset:
         df["action"] = [self.rules.get(r, "entfernen") for r in rule]
         df["category"] = [self.categories.get(r, "Sonstiges") for r in rule]
         df["rule"] = [r or "" for r in rule]
+        df["reason"] = df["rule"].map({r: self.reason(r) for r in set(df["rule"])})
         df["is_printed"] = df["action"].isin(PRINTED_ACTIONS)
         return df

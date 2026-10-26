@@ -14,12 +14,21 @@ from collections.abc import Callable
 from nicegui import ui
 
 from config import QUALITIES, SCALES
+from core.analysis.ruleset import ScaleParameters, scale_reason
 from ui.texts import (ALIGN_NOTE, CONNECTOR_NOTE, LEGEND, MATRIX_COLUMNS, MATRIX_SVG, OPENING_CAPTION, OPENING_PICTO,
-                      QUALITY_NOTE, SCALE_NOTE, SETUP_SVG)
+                      QUALITY_NOTE, SETUP_SVG)
 from ui.widgets import button, popup, remember, saved, set_class, storey_label, tag
 
 MODES = ("matrix", "setup")
 COMPACT_FROM = 9         # ab so vielen Geschossen: schmale Karten ohne Zahlenzeile
+
+
+def scale_note(p: ScaleParameters) -> str:
+    """Hinweis zum Massstab: erste Zeile die Parameter (aus der Datenbank), darunter die Begründung."""
+    railing = f"Geländer als {p.min_thickness_railing_mm:g}-mm-Band" if p.min_thickness_railing_mm else "keine Bänder"
+    connectors = "Steckverbinder möglich" if p.connectors_allowed else "keine Steckverbinder"
+    return (f"Wände min. {p.min_thickness_wall_mm:g} mm · {railing} · Laibung {p.reveal_depth_mm:g} mm · {connectors}\n"
+            f"{scale_reason(p.ruleset_name)}")
 
 
 class Header:
@@ -94,7 +103,8 @@ class Header:
         scale = self.value("scale")
         with ui.element("div").classes("setup"):
             with ui.element("div").classes("setup-gruppe"):
-                with self._field(1, "Massstab", SCALE_NOTE.get(scale, "")):
+                # Hinweis zum eben gewählten Massstab, nicht zu dem, den die Sitzung noch analysiert
+                with self._field(1, "Massstab", scale_note(ScaleParameters.from_row(self.s.db.scale_parameters(scale)))):
                     self._segments("scale", [(v, v) for v in SCALES])
             with ui.element("div").classes("setup-gruppe schrumpft"):
                 with self._field(2, "Drucker", css_class="schrumpft"):

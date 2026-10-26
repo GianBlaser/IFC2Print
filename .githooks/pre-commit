@@ -1,0 +1,38 @@
+#!/bin/sh
+# Pre-Commit: docs/REFERENZ.md neu erzeugen, wenn sich ihre Quellen im Commit ändern.
+#
+# Aktivieren (einmal je Klon):  git config core.hooksPath .githooks
+#
+# Quellen: config.py, ScaleParameters (core/analysis/ruleset.py), Seed-CSVs, der Generator selbst.
+# Erzeugt wird aus dem Arbeitsstand. Ist eine Quelle nur teilweise gestaged, kann die Referenz Änderungen
+# enthalten, die nicht im Commit sind – dann bricht der Hook ab.
+
+sources="config.py core/analysis/ruleset.py db/seed scripts/reference.py"
+
+# shellcheck disable=SC2086
+if [ -z "$(git diff --cached --name-only -- $sources)" ]; then
+    exit 0
+fi
+# shellcheck disable=SC2086
+if [ -n "$(git diff --name-only -- $sources)" ]; then
+    echo "pre-commit: Quellen von docs/REFERENZ.md haben ungestagte Änderungen:" >&2
+    # shellcheck disable=SC2086
+    git diff --name-only -- $sources >&2
+    echo "Alles stagen (oder stashen) und erneut committen." >&2
+    exit 1
+fi
+
+for python in .venv/Scripts/python.exe .venv/bin/python python3 python; do
+    if command -v "$python" >/dev/null 2>&1; then
+        break
+    fi
+done
+
+"$python" scripts/reference.py >/dev/null || {
+    echo "pre-commit: scripts/reference.py ist fehlgeschlagen." >&2
+    exit 1
+}
+if ! git diff --quiet -- docs/REFERENZ.md || [ -n "$(git ls-files --others -- docs/REFERENZ.md)" ]; then
+    git add docs/REFERENZ.md
+    echo "pre-commit: docs/REFERENZ.md neu erzeugt und zum Commit hinzugefügt."
+fi

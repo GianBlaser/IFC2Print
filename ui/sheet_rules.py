@@ -12,6 +12,7 @@ Ausgabe: das Blatt 03 (Element self.sheet); jede Regel wird gespeichert und das 
 import pandas as pd
 from nicegui import events, run, ui
 
+from core.analysis.ruleset import rule_reason
 from core.ifc.schema import all_classes
 from ui.sheet_elements import SheetElements
 from ui.texts import GROUP_OF, GROUP_ORDER, GROUP_WITHOUT_RULE, HANDLE_JS
@@ -154,8 +155,9 @@ class SheetRules:
                     self._rule_row(rule, n)
             if without:
                 tag("div", GROUP_WITHOUT_RULE, "regel-gruppe")
+                actions = {r["ifc_class_name"]: r["action"] for r in self.s.rules}
             for k in without:
-                self._row_without_rule(k)
+                self._row_without_rule(k, actions.get(k["rule"], ""))
             more = self._schema_rows(query, without) if query else []
             if query and not (any(groups.values()) or without or more):
                 tag("p", f"Keine IFC-Klasse enthält «{self.search_text}».", "hint")
@@ -165,16 +167,23 @@ class SheetRules:
         name = rule["ifc_class_name"]
         with ui.element("div").classes("regel-zeile"):
             with ui.element("span").classes("regel-name"):
-                class_name_label(name, rule["category"], in_model=n > 0)
+                reason = rule_reason(self.s.ruleset_name, name, rule["action"])
+                class_name_label(name, f"{rule['category']} · {reason}" if reason else rule["category"], in_model=n > 0)
                 if n:
                     tag("small", f"{n}×")
             radio_buttons(name, rule["action"], self.set_rule, rule["category"])
 
-    def _row_without_rule(self, k: dict) -> None:
-        """Klasse des Modells ohne eigene Regel, mit der Regel, die stattdessen gilt (gestrichelter Punkt)."""
+    def _row_without_rule(self, k: dict, rule_action: str) -> None:
+        """Klasse des Modells ohne eigene Regel, mit der Regel, die stattdessen gilt (gestrichelter Punkt).
+
+        ``rule_action``: Aktion dieser Regel – die Begründung gilt der Regel, nicht dem Bauteil (Umgebung, Ausnahmen).
+        """
         with ui.element("div").classes("regel-zeile"):
             with ui.element("span").classes("regel-name"):
-                class_name_label(k["ifc_class_name"], "Im Modell ohne eigene Regel – ein Klick legt sie an", italic=True)
+                note = "Im Modell ohne eigene Regel – ein Klick legt sie an"
+                if reason := rule_reason(self.s.ruleset_name, k["rule"], rule_action):
+                    note += f"\nWie {k['rule']}: {reason}"
+                class_name_label(k["ifc_class_name"], note, italic=True)
                 tag("small", f"{k['count']}× · " + (f"wie {k['rule']}" if k["rule"] else "keine Regel"))
             radio_buttons(k["ifc_class_name"], k["action"], self.set_rule, k["category"], inherited=True)
 

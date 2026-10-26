@@ -153,4 +153,8 @@ h1, h2 { margin: 0; font-family: "Instrument Sans"; font-weight: 600; }
 .elements td:last-child { padding-right: 10px; }
 .elements td.name { font: 400 12px/1.2 "Instrument Sans"; }
 .elements .num { text-align: right; }
+.rule-list td { vertical-align: top; }
+.rule-list td.reason { white-space: normal; font: 400 11px/1.35 "Instrument Sans"; color: #5E6269; }
+.rule-list td.num { padding-right: 16px; }
+.appendix h2.next { margin-top: 32px; }
 .elements tr { break-inside: avoid; }

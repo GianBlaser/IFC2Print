@@ -55,17 +55,18 @@ def analyse(ifc: IfcModel, ruleset: Ruleset, scale: int, profile: dict,
 
     ``exceptions``: GUID → Aktion; übersteuert Regel und Umgebung für einzelne Bauteile.
     ``storeys``: nur diese Geschosse drucken (None = alle) – Ausschnitte, v.a. bei 1:50.
+    Wo nicht mehr die Regel entscheidet, bleibt ``rule`` stehen, ``reason`` wird leer (Anhang im PDF-Report).
     """
     df = ruleset.classify(ifc.building_elements, ifc.schema_id)
     outside = surroundings.is_surroundings(df)
-    df.loc[outside, ["action", "category", "is_printed"]] = ["entfernen", "Umgebung", False]
+    df.loc[outside, ["action", "category", "is_printed", "reason"]] = ["entfernen", "Umgebung", False, ""]
     far = surroundings.outlier(df)
-    df.loc[far, ["action", "category", "is_printed"]] = ["entfernen", "Ausreisser", False]
+    df.loc[far, ["action", "category", "is_printed", "reason"]] = ["entfernen", "Ausreisser", False, ""]
     for guid, action in (exceptions or {}).items():
-        df.loc[df["guid"] == guid, ["action", "is_printed"]] = [action, action in PRINTED_ACTIONS]
+        df.loc[df["guid"] == guid, ["action", "is_printed", "reason"]] = [action, action in PRINTED_ACTIONS, ""]
     if storeys is not None:
         deselected = df["is_printed"] & ~df["storey"].isin(storeys)
-        df.loc[deselected, ["action", "category", "is_printed"]] = ["entfernen", "Geschoss abgewählt", False]
+        df.loc[deselected, ["action", "category", "is_printed", "reason"]] = ["entfernen", "Geschoss abgewählt", False, ""]
     df = printability.check(assign_packages(ifc, df, scale, profile), scale, profile)
     df.loc[df["action"] == "band", "status"] = "druckbar"      # gedruckt als Band fester Dicke (core/voxels/band.py)
     return df

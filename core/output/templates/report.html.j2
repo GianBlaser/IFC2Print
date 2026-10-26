@@ -173,7 +173,19 @@
 {#- ================= Seite 3 ff. · Anhang ================= #}
 <section class="appendix">
   <span class="kicker">03 · ANHANG</span>
-  <h2>Bauteiltabelle</h2>
+  {% if d.rules %}
+  <h2>Regeln dieses Modells</h2>
+  <table class="elements rule-list">
+    <colgroup><col class="c-class"><col class="c-real"><col></colgroup>
+    <thead><tr><th>REGEL</th><th class="num">BAUTEILE</th><th>BEGRÜNDUNG</th></tr></thead>
+    <tbody>
+      {% for r in d.rules %}
+      <tr><td>{{ r.rule }}</td><td class="num">{{ r.count }}</td><td class="reason">{{ r.reason }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <h2{% if d.rules %} class="next"{% endif %}>Bauteiltabelle</h2>
   <table class="elements">
     <colgroup><col class="c-class"><col><col class="c-storey"><col class="c-real"><col class="c-model"><col class="c-action"></colgroup>
     <thead><tr><th>KLASSE</th><th>NAME</th><th>GESCH.</th><th class="num">REAL (MM)</th><th>MODELL (MM)</th><th>AKTION</th></tr></thead>

@@ -3,7 +3,8 @@
 import pandas as pd
 import pytest
 
-from core.analysis.ruleset import check_action, PRINTED_ACTIONS, Ruleset
+from config import SCALES
+from core.analysis.ruleset import check_action, PRINTED_ACTIONS, rule_reason, Ruleset, scale_reason
 from db.database import Database
 
 
@@ -170,3 +171,35 @@ def test_four_scales_with_parameters():
     assert Ruleset.default("Standard 1:200").scale == "1:200"          # alter Name
     with pytest.raises(ValueError):
         Ruleset.default("1:333")
+
+
+# --- Begründungen (Spalte «reason» der Seed-CSVs) ---------------------------------------------
+
+@pytest.mark.parametrize("scale", list(SCALES))
+def test_every_standard_rule_and_scale_has_a_reason(scale):
+    ruleset_obj = Ruleset.default(scale)
+    assert all(ruleset_obj.reason(k) for k in ruleset_obj.rules)
+    assert scale_reason(scale)
+
+
+def test_reason_follows_the_standard_only():
+    """Die Begründung gilt nur, solange die Regel dem Standard entspricht."""
+    standard = rule_reason("1:200", "IfcRailing", "band")
+    assert standard and not standard.startswith("Eigene Regel")
+    assert rule_reason("1:200", "IfcRailing", "entfernen") == "Eigene Regel (Standard: band)."
+    assert rule_reason("1:200", "IfcFantasieElement", "behalten") == "Eigene Regel."
+    assert rule_reason("1:200", "", "entfernen") == ""
+
+
+def test_classify_adds_reason(ruleset_obj):
+    out = ruleset_obj.classify(pd.DataFrame({"ifc_class": ["IfcWall", "IfcFantasieElement"]}))
+    assert out["reason"].iloc[0] == ruleset_obj.reason("IfcWall") != ""
+    assert out["reason"].iloc[1] == ""
+
+
+def test_reason_stays_out_of_the_database(tmp_path):
+    """Die Seed-Spalte «reason» hat in der Datenbank kein Gegenstück und wird beim Einspielen übergangen."""
+    db = Database(tmp_path / "test.db")
+    assert "reason" not in db.rules("1:200")[0]
+    assert "reason" not in db.scale_parameters("1:200")
+    db.close()

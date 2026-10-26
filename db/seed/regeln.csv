@@ -1,100 +1,100 @@
-ruleset_name,ifc_class_name,action,category
-1:500,IfcWall,behalten,Wand
-1:500,IfcWallStandardCase,behalten,Wand
-1:500,IfcSlab,behalten,Decke
-1:500,IfcRoof,behalten,Dach
-1:500,IfcFooting,entfernen,Fundament
-1:500,IfcColumn,verdicken,Stütze
-1:500,IfcBeam,verdicken,Träger
-1:500,IfcBeam.LINTEL,fuellen,Träger
-1:500,IfcChimney,verdicken,Dach
-1:500,IfcStair,entfernen,Treppe
-1:500,IfcStairFlight,entfernen,Treppe
-1:500,IfcRamp,entfernen,Treppe
-1:500,IfcRampFlight,entfernen,Treppe
-1:500,IfcRailing,entfernen,Geländer
-1:500,IfcCurtainWall,entfernen,Verglasung
-1:500,IfcPlate,entfernen,Verglasung
-1:500,IfcMember,entfernen,Verglasung
-1:500,IfcWindow,entfernen,Öffnung
-1:500,IfcDoor,entfernen,Öffnung
-1:500,IfcCovering,entfernen,Ausbau
-1:500,IfcCovering.CLADDING,behalten,Fassade
-1:500,IfcCovering.ROOFING,entfernen,Dach
-1:500,IfcFurnishingElement,entfernen,Möblierung
-1:500,IfcFlowTerminal,entfernen,Haustechnik
-1:500,IfcBuildingElementProxy,entfernen,Sonstiges
-1:200,IfcWall,behalten,Wand
-1:200,IfcWallStandardCase,behalten,Wand
-1:200,IfcSlab,behalten,Decke
-1:200,IfcRoof,behalten,Dach
-1:200,IfcFooting,entfernen,Fundament
-1:200,IfcColumn,verdicken,Stütze
-1:200,IfcBeam,verdicken,Träger
-1:200,IfcBeam.LINTEL,fuellen,Träger
-1:200,IfcChimney,verdicken,Dach
-1:200,IfcStair,behalten,Treppe
-1:200,IfcStairFlight,behalten,Treppe
-1:200,IfcRamp,behalten,Treppe
-1:200,IfcRampFlight,behalten,Treppe
-1:200,IfcRailing,band,Geländer
-1:200,IfcCurtainWall,entfernen,Verglasung
-1:200,IfcPlate,entfernen,Verglasung
-1:200,IfcMember,entfernen,Verglasung
-1:200,IfcWindow,entfernen,Öffnung
-1:200,IfcDoor,entfernen,Öffnung
-1:200,IfcCovering,entfernen,Ausbau
-1:200,IfcCovering.CLADDING,behalten,Fassade
-1:200,IfcCovering.ROOFING,entfernen,Dach
-1:200,IfcFurnishingElement,entfernen,Möblierung
-1:200,IfcFlowTerminal,entfernen,Haustechnik
-1:200,IfcBuildingElementProxy,entfernen,Sonstiges
-1:100,IfcWall,behalten,Wand
-1:100,IfcWallStandardCase,behalten,Wand
-1:100,IfcSlab,behalten,Decke
-1:100,IfcRoof,behalten,Dach
-1:100,IfcFooting,entfernen,Fundament
-1:100,IfcColumn,verdicken,Stütze
-1:100,IfcBeam,verdicken,Träger
-1:100,IfcBeam.LINTEL,fuellen,Träger
-1:100,IfcChimney,verdicken,Dach
-1:100,IfcStair,behalten,Treppe
-1:100,IfcStairFlight,behalten,Treppe
-1:100,IfcRamp,behalten,Treppe
-1:100,IfcRampFlight,behalten,Treppe
-1:100,IfcRailing,band,Geländer
-1:100,IfcCurtainWall,entfernen,Verglasung
-1:100,IfcPlate,entfernen,Verglasung
-1:100,IfcMember,entfernen,Verglasung
-1:100,IfcWindow,entfernen,Öffnung
-1:100,IfcDoor,entfernen,Öffnung
-1:100,IfcCovering,entfernen,Ausbau
-1:100,IfcCovering.CLADDING,behalten,Fassade
-1:100,IfcCovering.ROOFING,behalten,Dach
-1:100,IfcFurnishingElement,entfernen,Möblierung
-1:100,IfcFlowTerminal,entfernen,Haustechnik
-1:100,IfcBuildingElementProxy,entfernen,Sonstiges
-1:50,IfcWall,behalten,Wand
-1:50,IfcWallStandardCase,behalten,Wand
-1:50,IfcSlab,behalten,Decke
-1:50,IfcRoof,behalten,Dach
-1:50,IfcFooting,entfernen,Fundament
-1:50,IfcColumn,verdicken,Stütze
-1:50,IfcBeam,verdicken,Träger
-1:50,IfcChimney,verdicken,Dach
-1:50,IfcStair,behalten,Treppe
-1:50,IfcStairFlight,behalten,Treppe
-1:50,IfcRamp,behalten,Treppe
-1:50,IfcRampFlight,behalten,Treppe
-1:50,IfcRailing,band,Geländer
-1:50,IfcCurtainWall,entfernen,Verglasung
-1:50,IfcPlate,entfernen,Verglasung
-1:50,IfcMember,entfernen,Verglasung
-1:50,IfcWindow,entfernen,Öffnung
-1:50,IfcDoor,entfernen,Öffnung
-1:50,IfcCovering,entfernen,Ausbau
-1:50,IfcCovering.CLADDING,behalten,Fassade
-1:50,IfcCovering.ROOFING,behalten,Dach
-1:50,IfcFurnishingElement,entfernen,Möblierung
-1:50,IfcFlowTerminal,entfernen,Haustechnik
-1:50,IfcBuildingElementProxy,entfernen,Sonstiges
+ruleset_name,ifc_class_name,action,category,reason
+1:500,IfcWall,behalten,Wand,"Auch im Volumenmodell bleiben die Innenwände: Sie tragen die Decke darüber, Stützmaterial im Gebäude liesse sich nicht entfernen. Dünnere Wände werden auf die Mindestdicke gebracht."
+1:500,IfcWallStandardCase,behalten,Wand,Wie IfcWall.
+1:500,IfcSlab,behalten,Decke,Decken bilden Boden und Deckel der Geschossteile. Zu dünne Decken werden als Paket auf die Mindestwand des Druckerprofils gebracht.
+1:500,IfcRoof,behalten,Dach,"Das Dach prägt die Gebäudeform. Dachflächen und Sparren darin folgen dieser Regel, egal wie das Autorentool das Dach zerlegt."
+1:500,IfcFooting,entfernen,Fundament,Fundamente liegen im Erdreich und sind am Modell nicht sichtbar; die Unterseite des untersten Geschosses bleibt so eben.
+1:500,IfcColumn,verdicken,Stütze,"Stützen tragen die Decke darüber. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt, statt wegzufallen."
+1:500,IfcBeam,verdicken,Träger,"Träger tragen und sind oft schlank. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt."
+1:500,IfcBeam.LINTEL,fuellen,Träger,"Sturz und Storenkasten-Einlage als Quader: Die Rinne der U-förmigen Einlage würde sonst die Deckenunterseite einkerben. Bei 1:50 gilt die Regel von IfcBeam, das Detail bleibt."
+1:500,IfcChimney,verdicken,Dach,Kamine prägen die Dachsilhouette. Schlanke Kamine werden auf die Mindestwand aufgedickt.
+1:500,IfcStair,entfernen,Treppe,Im Volumenmodell zu fein: Eine Stufe (17 cm) wäre bei 1:500 dünner als ein Voxel.
+1:500,IfcStairFlight,entfernen,Treppe,Im Volumenmodell zu fein: Eine Stufe (17 cm) wäre bei 1:500 dünner als ein Voxel.
+1:500,IfcRamp,entfernen,Treppe,"Im Volumenmodell zu fein, wie Treppen."
+1:500,IfcRampFlight,entfernen,Treppe,"Im Volumenmodell zu fein, wie Treppen."
+1:500,IfcRailing,entfernen,Geländer,Im Volumenmodell zu filigran; bei 1:500 gibt es keine Bänder.
+1:500,IfcCurtainWall,entfernen,Verglasung,"Die Vorhangfassade selbst wird nicht gedruckt. Ihre Öffnung schliesst ein Füller nach dem Öffnungsmodus der Fenster (voll, vertieft oder offen)."
+1:500,IfcPlate,entfernen,Verglasung,"Meist Glas von Vorhangfassaden, zu dünn für den Druck; die Fläche schliesst der Füller der Fassade. Als Teil eines Dachs gilt dessen Regel."
+1:500,IfcMember,entfernen,Verglasung,"Meist Pfosten und Riegel von Vorhangfassaden, zu dünn für den Druck. Als Teil eines Dachs oder Geländers gilt dessen Regel."
+1:500,IfcWindow,entfernen,Öffnung,"Fenster werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:500,IfcDoor,entfernen,Öffnung,"Türen werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:500,IfcCovering,entfernen,Ausbau,"Bodenbeläge, Deckenverkleidungen und Dämmungen im Innern sind dünn und am Modell nicht sichtbar."
+1:500,IfcCovering.CLADDING,behalten,Fassade,Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst.
+1:500,IfcCovering.ROOFING,entfernen,Dach,Der Dachaufbau ändert die Dachform bei 1:500 kaum.
+1:500,IfcFurnishingElement,entfernen,Möblierung,Möbel gehören nicht ins Massstabsmodell.
+1:500,IfcFlowTerminal,entfernen,Haustechnik,"Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell."
+1:500,IfcBuildingElementProxy,entfernen,Sonstiges,"Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen."
+1:200,IfcWall,behalten,Wand,Wände geben die Gebäudeform und tragen die Decke darüber. Sie behalten ihre Dicke; nur dünnere werden als Paket auf die Mindestdicke des Massstabs gebracht.
+1:200,IfcWallStandardCase,behalten,Wand,Wie IfcWall.
+1:200,IfcSlab,behalten,Decke,Decken bilden Boden und Deckel der Geschossteile. Zu dünne Decken werden als Paket auf die Mindestwand des Druckerprofils gebracht.
+1:200,IfcRoof,behalten,Dach,"Das Dach prägt die Gebäudeform. Dachflächen und Sparren darin folgen dieser Regel, egal wie das Autorentool das Dach zerlegt."
+1:200,IfcFooting,entfernen,Fundament,Fundamente liegen im Erdreich und sind am Modell nicht sichtbar; die Unterseite des untersten Geschosses bleibt so eben.
+1:200,IfcColumn,verdicken,Stütze,"Stützen tragen die Decke darüber. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt, statt wegzufallen."
+1:200,IfcBeam,verdicken,Träger,"Träger tragen und sind oft schlank. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt."
+1:200,IfcBeam.LINTEL,fuellen,Träger,"Sturz und Storenkasten-Einlage als Quader: Die Rinne der U-förmigen Einlage würde sonst die Deckenunterseite einkerben. Bei 1:50 gilt die Regel von IfcBeam, das Detail bleibt."
+1:200,IfcChimney,verdicken,Dach,Kamine prägen die Dachsilhouette. Schlanke Kamine werden auf die Mindestwand aufgedickt.
+1:200,IfcStair,behalten,Treppe,Treppen zeigen die Erschliessung. Ab 1:200 ist eine Stufe rund zwei Voxel hoch und druckbar.
+1:200,IfcStairFlight,behalten,Treppe,"Treppenlauf, wie IfcStair."
+1:200,IfcRamp,behalten,Treppe,"Rampen zeigen die Erschliessung, wie Treppen."
+1:200,IfcRampFlight,behalten,Treppe,"Rampenlauf, wie IfcRamp."
+1:200,IfcRailing,band,Geländer,Geländerstäbe (2 cm) würden beim Voxelisieren verschwinden. Das Geländer wird deshalb als dünne Scheibe vom Boden bis zur Geländerhöhe gedruckt.
+1:200,IfcCurtainWall,entfernen,Verglasung,"Die Vorhangfassade selbst wird nicht gedruckt. Ihre Öffnung schliesst ein Füller nach dem Öffnungsmodus der Fenster (voll, vertieft oder offen)."
+1:200,IfcPlate,entfernen,Verglasung,"Meist Glas von Vorhangfassaden, zu dünn für den Druck; die Fläche schliesst der Füller der Fassade. Als Teil eines Dachs gilt dessen Regel."
+1:200,IfcMember,entfernen,Verglasung,"Meist Pfosten und Riegel von Vorhangfassaden, zu dünn für den Druck. Als Teil eines Dachs oder Geländers gilt dessen Regel."
+1:200,IfcWindow,entfernen,Öffnung,"Fenster werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:200,IfcDoor,entfernen,Öffnung,"Türen werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:200,IfcCovering,entfernen,Ausbau,"Bodenbeläge, Deckenverkleidungen und Dämmungen im Innern sind dünn und am Modell nicht sichtbar."
+1:200,IfcCovering.CLADDING,behalten,Fassade,Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst.
+1:200,IfcCovering.ROOFING,entfernen,Dach,Der Dachaufbau ändert die Dachform bei 1:200 kaum.
+1:200,IfcFurnishingElement,entfernen,Möblierung,Möbel gehören nicht ins Massstabsmodell.
+1:200,IfcFlowTerminal,entfernen,Haustechnik,"Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell."
+1:200,IfcBuildingElementProxy,entfernen,Sonstiges,"Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen."
+1:100,IfcWall,behalten,Wand,Wände geben die Gebäudeform und tragen die Decke darüber. Sie behalten ihre Dicke; nur dünnere werden als Paket auf die Mindestdicke des Massstabs gebracht.
+1:100,IfcWallStandardCase,behalten,Wand,Wie IfcWall.
+1:100,IfcSlab,behalten,Decke,Decken bilden Boden und Deckel der Geschossteile. Zu dünne Decken werden als Paket auf die Mindestwand des Druckerprofils gebracht.
+1:100,IfcRoof,behalten,Dach,"Das Dach prägt die Gebäudeform. Dachflächen und Sparren darin folgen dieser Regel, egal wie das Autorentool das Dach zerlegt."
+1:100,IfcFooting,entfernen,Fundament,Fundamente liegen im Erdreich und sind am Modell nicht sichtbar; die Unterseite des untersten Geschosses bleibt so eben.
+1:100,IfcColumn,verdicken,Stütze,"Stützen tragen die Decke darüber. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt, statt wegzufallen."
+1:100,IfcBeam,verdicken,Träger,"Träger tragen und sind oft schlank. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt."
+1:100,IfcBeam.LINTEL,fuellen,Träger,"Sturz und Storenkasten-Einlage als Quader: Die Rinne der U-förmigen Einlage würde sonst die Deckenunterseite einkerben. Bei 1:50 gilt die Regel von IfcBeam, das Detail bleibt."
+1:100,IfcChimney,verdicken,Dach,Kamine prägen die Dachsilhouette. Schlanke Kamine werden auf die Mindestwand aufgedickt.
+1:100,IfcStair,behalten,Treppe,Treppen zeigen die Erschliessung. Ab 1:200 ist eine Stufe rund zwei Voxel hoch und druckbar.
+1:100,IfcStairFlight,behalten,Treppe,"Treppenlauf, wie IfcStair."
+1:100,IfcRamp,behalten,Treppe,"Rampen zeigen die Erschliessung, wie Treppen."
+1:100,IfcRampFlight,behalten,Treppe,"Rampenlauf, wie IfcRamp."
+1:100,IfcRailing,band,Geländer,Geländerstäbe (2 cm) würden beim Voxelisieren verschwinden. Das Geländer wird deshalb als dünne Scheibe vom Boden bis zur Geländerhöhe gedruckt.
+1:100,IfcCurtainWall,entfernen,Verglasung,"Die Vorhangfassade selbst wird nicht gedruckt. Ihre Öffnung schliesst ein Füller nach dem Öffnungsmodus der Fenster (voll, vertieft oder offen)."
+1:100,IfcPlate,entfernen,Verglasung,"Meist Glas von Vorhangfassaden, zu dünn für den Druck; die Fläche schliesst der Füller der Fassade. Als Teil eines Dachs gilt dessen Regel."
+1:100,IfcMember,entfernen,Verglasung,"Meist Pfosten und Riegel von Vorhangfassaden, zu dünn für den Druck. Als Teil eines Dachs oder Geländers gilt dessen Regel."
+1:100,IfcWindow,entfernen,Öffnung,"Fenster werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:100,IfcDoor,entfernen,Öffnung,"Türen werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:100,IfcCovering,entfernen,Ausbau,"Bodenbeläge, Deckenverkleidungen und Dämmungen im Innern sind dünn und am Modell nicht sichtbar."
+1:100,IfcCovering.CLADDING,behalten,Fassade,Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst.
+1:100,IfcCovering.ROOFING,behalten,Dach,Ab 1:100 trägt der Dachaufbau sichtbar zur Dachdicke bei; er wird mit dem Dach zum Paket zusammengefasst.
+1:100,IfcFurnishingElement,entfernen,Möblierung,Möbel gehören nicht ins Massstabsmodell.
+1:100,IfcFlowTerminal,entfernen,Haustechnik,"Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell."
+1:100,IfcBuildingElementProxy,entfernen,Sonstiges,"Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen."
+1:50,IfcWall,behalten,Wand,Wände geben die Gebäudeform und tragen die Decke darüber. Sie behalten ihre Dicke; nur dünnere werden als Paket auf die Mindestdicke des Massstabs gebracht.
+1:50,IfcWallStandardCase,behalten,Wand,Wie IfcWall.
+1:50,IfcSlab,behalten,Decke,Decken bilden Boden und Deckel der Geschossteile. Zu dünne Decken werden als Paket auf die Mindestwand des Druckerprofils gebracht.
+1:50,IfcRoof,behalten,Dach,"Das Dach prägt die Gebäudeform. Dachflächen und Sparren darin folgen dieser Regel, egal wie das Autorentool das Dach zerlegt."
+1:50,IfcFooting,entfernen,Fundament,Fundamente liegen im Erdreich und sind am Modell nicht sichtbar; die Unterseite des untersten Geschosses bleibt so eben.
+1:50,IfcColumn,verdicken,Stütze,"Stützen tragen die Decke darüber. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt, statt wegzufallen."
+1:50,IfcBeam,verdicken,Träger,"Träger tragen und sind oft schlank. Sind sie dünner als die Mindestwand, werden sie allseitig aufgedickt."
+1:50,IfcChimney,verdicken,Dach,Kamine prägen die Dachsilhouette. Schlanke Kamine werden auf die Mindestwand aufgedickt.
+1:50,IfcStair,behalten,Treppe,Treppen zeigen die Erschliessung. Ab 1:200 ist eine Stufe rund zwei Voxel hoch und druckbar.
+1:50,IfcStairFlight,behalten,Treppe,"Treppenlauf, wie IfcStair."
+1:50,IfcRamp,behalten,Treppe,"Rampen zeigen die Erschliessung, wie Treppen."
+1:50,IfcRampFlight,behalten,Treppe,"Rampenlauf, wie IfcRamp."
+1:50,IfcRailing,band,Geländer,Geländerstäbe (2 cm) würden beim Voxelisieren verschwinden. Das Geländer wird deshalb als dünne Scheibe vom Boden bis zur Geländerhöhe gedruckt.
+1:50,IfcCurtainWall,entfernen,Verglasung,"Die Vorhangfassade selbst wird nicht gedruckt. Ihre Öffnung schliesst ein Füller nach dem Öffnungsmodus der Fenster (voll, vertieft oder offen)."
+1:50,IfcPlate,entfernen,Verglasung,"Meist Glas von Vorhangfassaden, zu dünn für den Druck; die Fläche schliesst der Füller der Fassade. Als Teil eines Dachs gilt dessen Regel."
+1:50,IfcMember,entfernen,Verglasung,"Meist Pfosten und Riegel von Vorhangfassaden, zu dünn für den Druck. Als Teil eines Dachs oder Geländers gilt dessen Regel."
+1:50,IfcWindow,entfernen,Öffnung,"Fenster werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:50,IfcDoor,entfernen,Öffnung,"Türen werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten."
+1:50,IfcCovering,entfernen,Ausbau,"Bodenbeläge, Deckenverkleidungen und Dämmungen im Innern sind dünn und am Modell nicht sichtbar."
+1:50,IfcCovering.CLADDING,behalten,Fassade,Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst.
+1:50,IfcCovering.ROOFING,behalten,Dach,Ab 1:100 trägt der Dachaufbau sichtbar zur Dachdicke bei; er wird mit dem Dach zum Paket zusammengefasst.
+1:50,IfcFurnishingElement,entfernen,Möblierung,Möbel gehören nicht ins Massstabsmodell.
+1:50,IfcFlowTerminal,entfernen,Haustechnik,"Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell."
+1:50,IfcBuildingElementProxy,entfernen,Sonstiges,"Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen."
