@@ -21,6 +21,7 @@ SKIPPED_DIRS = {".venv", ".git", "__pycache__", ".pytest_cache"}
 FILE_SUFFIX = re.compile(r"\.(py|csv|sql|md|json|css|j2|html|toml|txt|ifc|svg|db|png)$")
 IDENTIFIER = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*(\(\))?$")
 IFC_KEY = re.compile(r"^Ifc\w+(\.\w+)?(/Ifc\w+)?$")          # Regelschlüssel: Klasse, Klasse.TYP, Ganzes/Teil
+GENERATED_FILES = {".nicegui/secret.txt"}                      # entsteht erst beim Start der App
 EXTERNAL_NAMES = {"WEASYPRINT_DLL_DIRECTORIES"}               # Umgebungsvariable von WeasyPrint, nicht im Code
 UNITS = {"m": 1000.0, "%": 0.01}                              # «`JOINT_WIDTH_MM` = 2 m», «`ISLAND_RATIO` = 25 %»
 
@@ -79,6 +80,8 @@ def test_paths_and_files_exist(document):
     names = {p.name for p in files}
     missing = []
     for code in (c.strip('"') for c in _inline_code(document)):
+        if code in GENERATED_FILES:
+            continue
         if " " in code or "{" in code or code.startswith("/") or IFC_KEY.match(code)                 or not (FILE_SUFFIX.search(code) or "/" in code):
             continue
         if "/" in code:     # vom Projektordner aus oder als Ende eines Pfads («templates/report.html.j2»)
