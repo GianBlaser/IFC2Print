@@ -324,9 +324,24 @@ button { font: inherit; color: inherit; }
 .radio.geerbt i { background: var(--text); }
 .sheet-foot { padding: 12px 16px; border-top: 1px solid var(--border-2); display: flex; align-items: center; gap: 12px; flex: none; }
 .sheet-foot .hint { flex: 1; }
+.regel-knoepfe { display: flex; gap: 6px; flex: none; }
 .pill-knopf { border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: 8px 12px; font: 500 12px/1 var(--mono);
   color: var(--text); cursor: pointer; white-space: nowrap; }
 .pill-knopf:hover { border-color: var(--primary); }
+
+/* 03 › Massstab: einstellbare Parameter */
+.parameter-liste { flex: 1; min-height: 0; overflow: auto; padding: 4px 16px 8px; }
+.parameter-liste > .hint { padding: 10px 0 6px; font-size: 12.5px; }
+.parameter-zeile { display: grid; grid-template-columns: minmax(0,1fr) 96px 78px; gap: 10px; align-items: center;
+  padding: 9px 6px; border-bottom: 1px solid var(--border-2); }
+.parameter-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.parameter-text b { font: 500 12.5px var(--sans); color: var(--text); }
+.parameter-text small { font: 400 11px/1.35 var(--sans); color: var(--muted); }
+.parameter-zeile > .hint { grid-column: 2 / -1; font-size: 11.5px; }
+.parameter-zeile.eigen .parameter-text b::after { content: " · eigen"; color: var(--accent-text); font: 500 10.5px var(--mono); }
+.parameter-standard { display: flex; align-items: center; gap: 2px; }
+.parameter-standard small { font: 400 10.5px var(--mono); color: var(--faint); white-space: nowrap; }
+.parameter-standard .regel-extra { visibility: visible; }
 
 /* 03 › Bauteile */
 .bauteile-kopf { padding: 10px 16px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--border-2); flex: none; }

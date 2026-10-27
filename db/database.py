@@ -6,12 +6,14 @@ Ausgabe: Klasse Database mit Lese- und Schreibmethoden (Zeilen als dict)
 
 Beim Start wird das Schema angelegt und die Seed-CSVs in db/seed/ werden
 eingespielt. INSERT OR IGNORE ergänzt fehlende Standardeinträge, ohne
-Änderungen des Nutzers zu überschreiben. Ausnahme: Die Massstab-Parameter (Tabelle scale) ändert der Nutzer nicht;
-sie werden jedes Mal aus massstaebe.csv übernommen, damit die CSV die einzige Quelle bleibt.
+Änderungen des Nutzers zu überschreiben. Ausnahme: Die Standard-Parameter der Massstäbe (Tabelle scale) werden
+jedes Mal aus massstaebe.csv übernommen, damit die CSV die einzige Quelle bleibt; eigene Werte einzelner Parameter
+liegen getrennt in scale_override und gelten darüber (``scale_parameters``).
 Die regeln.db selbst wird nicht eingecheckt.
 """
 
 import csv
+import io
 import logging
 import sqlite3
 import threading
@@ -19,7 +21,8 @@ from datetime import datetime
 from pathlib import Path
 
 from config import SCALES
-from core.analysis.ruleset import check_action, check_key, LEGACY_RULE_SETS, seed_rules
+from core.analysis.ruleset import (ALL_SCALES, check_action, check_key, check_scale_parameter, LEGACY_RULE_SETS,
+                                   row_scales, seed_rules)
 
 _HERE = Path(__file__).parent
 DEFAULT_PATH = _HERE / "regeln.db"
@@ -157,11 +160,32 @@ class Database:
         return list(SCALES)
 
     def scale_parameters(self, ruleset_name: str) -> dict:
-        """Parameter eines Massstabs als Zeile (→ core.analysis.ruleset.ScaleParameters.from_row)."""
+        """Parameter eines Massstabs als Zeile, eigene Werte eingesetzt (→ ScaleParameters.from_row)."""
         rows = self._all("SELECT * FROM scale WHERE ruleset_name = ?", (ruleset_name,))
         if not rows:
             raise ValueError(f"Unbekannter Massstab «{ruleset_name}»")
-        return rows[0]
+        return rows[0] | self.scale_overrides(ruleset_name)
+
+    def scale_overrides(self, ruleset_name: str) -> dict[str, float]:
+        """Eigene Werte eines Massstabs: Parameter → Wert (leer = alles Standard)."""
+        return {z["parameter"]: z["value"] for z in
+                self._all("SELECT parameter, value FROM scale_override WHERE ruleset_name = ?", (ruleset_name,))}
+
+    def set_scale_parameter(self, ruleset_name: str, parameter: str, value) -> None:
+        """Eigener Wert eines Parameters (geprüft mit check_scale_parameter); gilt nur für diesen Massstab."""
+        number = check_scale_parameter(parameter, value)
+        with self._lock, self._conn:
+            self._conn.execute("INSERT OR REPLACE INTO scale_override (ruleset_name, parameter, value) VALUES (?, ?, ?)",
+                               (ruleset_name, parameter, number))
+
+    def reset_scale_parameters(self, ruleset_name: str, parameter: str | None = None) -> None:
+        """Eigene Werte eines Massstabs löschen – einen Parameter oder (ohne ``parameter``) alle."""
+        with self._lock, self._conn:
+            if parameter is None:
+                self._conn.execute("DELETE FROM scale_override WHERE ruleset_name = ?", (ruleset_name,))
+            else:
+                self._conn.execute("DELETE FROM scale_override WHERE ruleset_name = ? AND parameter = ?",
+                                   (ruleset_name, parameter))
 
     def reset_rules(self, ruleset_name: str) -> None:
         """Regeln eines Massstabs auf den Standard (Seed) zurücksetzen; eigene Regeln gehen verloren."""
@@ -186,6 +210,46 @@ class Database:
                 "INSERT INTO rule (ruleset_name, ifc_class_name, action, category) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(ruleset_name, ifc_class_name) DO UPDATE SET action = excluded.action",
                 (ruleset_name, ifc_class_name, action, category))
+
+    def own_rules(self, ruleset_name: str) -> list[dict]:
+        """Regeln, die vom Standard abweichen: andere Aktion oder ein Schlüssel, den der Standard nicht kennt."""
+        standard = {z["ifc_class_name"]: z["action"] for z in seed_rules(ruleset_name)}
+        return [r for r in self.rules(ruleset_name) if standard.get(r["ifc_class_name"]) != r["action"]]
+
+    def export_rules(self, ruleset_name: str) -> str:
+        """Eigene Regeln eines Massstabs als CSV im Format der regeln.csv (ohne Begründung)."""
+        out = io.StringIO()
+        writer = csv.writer(out, lineterminator="\n")
+        writer.writerow(["scales", "ifc_class_name", "action", "category"])
+        writer.writerows([ruleset_name, r["ifc_class_name"], r["action"], r["category"]] for r in self.own_rules(ruleset_name))
+        return out.getvalue()
+
+    def import_rules(self, ruleset_name: str, text: str) -> int:
+        """Regeln aus einer CSV (Format von ``export_rules`` oder regeln.csv) für einen Massstab übernehmen.
+
+        Zeilen, deren Spalte «scales» den Massstab nicht nennt, werden übergangen; ohne die Spalte gelten alle.
+        Erst wird jede Zeile geprüft, dann alles in einem Schritt gespeichert: eine fehlerhafte Zeile ändert nichts.
+        Rückgabe: Anzahl übernommener Regeln.
+        """
+        rows = list(csv.DictReader(io.StringIO(text.lstrip("\ufeff"))))
+        if rows and not {"ifc_class_name", "action"} <= set(rows[0]):
+            raise ValueError("CSV braucht die Spalten ifc_class_name und action")
+        chosen = []
+        for number, row in enumerate(rows, start=2):                        # Zeile 1 = Kopf
+            try:
+                if "scales" in row and ruleset_name not in row_scales({**row, "scales": row["scales"] or ALL_SCALES}):
+                    continue
+                chosen.append((check_key(row["ifc_class_name"].strip()), check_action(row["action"].strip()),
+                               (row.get("category") or "").strip() or "Sonstiges"))
+            except ValueError as error:
+                raise ValueError(f"Zeile {number}: {error}") from None
+        with self._lock, self._conn:
+            for key, action, category in chosen:
+                self._conn.execute(
+                    "INSERT INTO rule (ruleset_name, ifc_class_name, action, category) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(ruleset_name, ifc_class_name) DO UPDATE SET action = excluded.action",
+                    (ruleset_name, key, action, category))
+        return len(chosen)
 
     def delete_rule(self, ruleset_name: str, ifc_class_name: str) -> None:
         """Löscht eine Regel; danach gilt wieder die allgemeinere (z.B. ohne Bedingung oder die der Oberklasse)."""

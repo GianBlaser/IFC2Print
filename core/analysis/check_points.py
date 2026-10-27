@@ -8,19 +8,22 @@ Ausgabe: Liste von Prüfpunkten (Dictionaries) bzw. Liste von Sätzen.
 
 import pandas as pd
 
-from core.analysis.ruleset import rule_class
+from collections.abc import Iterable
+
+from core.analysis.ruleset import condition_label, rule_class, split_key
 from core.ifc.assignment import room_names
 from core.ifc.model import IfcModel
 from core.ifc.schema import class_chain
 
 # Karte im Blatt 05 Prüfen, in der ein Prüfpunkt erscheint (Schlüssel = ``kind``)
-_CATEGORY = {"keine": "regeln", "geerbt": "regeln", "aggregate": "regeln", "storeys": "storeys",
+_CATEGORY = {"keine": "regeln", "geerbt": "regeln", "aggregate": "regeln", "bedingung": "regeln", "storeys": "storeys",
              "ausreisser": "ausreisser", "umgebung": "umgebung", "geometry": "geometry", "versatz": "georeferenz",
              "georeferenz": "georeferenz", "oeffnungen": "lauf", "gefaelle": "lauf"}   # lauf: nur im Ergebnis
 
 # Was tun je ``kind`` – Spalte «Was tun» im PDF-Report
 _FIX = {"keine": "Regeln im Blatt 03 ergänzen", "geometry": "IFC-Geometrie im Autorenwerkzeug prüfen",
         "geerbt": "Keine Aktion; Regel bei Bedarf eigens setzen", "aggregate": "Keine Aktion",
+        "bedingung": "Bedingung im Blatt 03 prüfen oder die Regel löschen",
         "storeys": "Keine Aktion", "ausreisser": "Im Blatt 03 je Bauteil übersteuern",
         "umgebung": "Im Blatt 03 je Bauteil übersteuern", "versatz": "Keine Aktion; Lage bleibt im IFC",
         "oeffnungen": "Keine Aktion", "gefaelle": "Keine Aktion"}
@@ -43,15 +46,17 @@ _RULE_KINDS = (
 )
 
 
-def check_points(ifc: IfcModel, df: pd.DataFrame) -> list[dict]:
+def check_points(ifc: IfcModel, df: pd.DataFrame, rules: Iterable[str] = ()) -> list[dict]:
     """Fälle, die sonst unbemerkt ein falsches Modell ergäben – strukturiert für die Oberfläche.
 
-    Je Punkt: ``kind`` (keine | geerbt | aggregate | storeys | ausreisser | umgebung | geometry | versatz | georeferenz),
+    ``rules``: die Regelschlüssel des Regelwerks – für Regeln mit Bedingung, die kein Bauteil trifft.
+    Je Punkt: ``kind`` (keine | geerbt | aggregate | bedingung | storeys | ausreisser | umgebung | geometry | versatz |
+    georeferenz),
     ``category`` (Karte im Blatt 05 Prüfen: regeln | storeys | ausreisser | umgebung | geometry | georeferenz),
     ``title``, ``explanation``, ``entries`` [(Text, Anzahl oder None)], ``target`` (Blatt zum Beheben oder None)
     und ``fix`` (Was tun, für den PDF-Report).
     """
-    points = (_rule_points(ifc, df) + _storey_name_points(ifc) + _outlier_points(df) + _surroundings_points(df)
+    points = (_rule_points(ifc, df) + _condition_points(ifc, df, rules) + _storey_name_points(ifc) + _outlier_points(df) + _surroundings_points(df)
               + _geometry_points(df) + _offset_points(ifc) + _georeference_points(ifc))
     for p in points:
         p["category"] = _CATEGORY[p["kind"]]
@@ -105,6 +110,25 @@ def _rule_points(ifc: IfcModel, df: pd.DataFrame) -> list[dict]:
             entries = [(f"{k} → {r}", int(n)) for (k, r), n in part.groupby(["ifc_class", "rule"]).size().items()]
         points.append(_point(kind, title, explanation, entries, target="regeln"))
     return points
+
+
+def _condition_points(ifc: IfcModel, df: pd.DataFrame, rules: Iterable[str]) -> list[dict]:
+    """Regeln mit Bedingung ohne Treffer, obwohl das Modell Bauteile ihrer Klasse hat (fehlt IsExternal im IFC?)."""
+    if "rule" not in df:
+        return []
+    used = set(df["rule"])
+    chains = {k: class_chain(k, ifc.schema_id) for k in df["ifc_class"].unique()}
+    entries = []
+    for key in sorted(rules):
+        base, condition = split_key(key)
+        target = rule_class(key).split("/")[-1]             # «Ganzes/Teil»: die Klasse des Teils
+        if condition and key not in used and any(target in chain for chain in chains.values()):
+            entries.append((f"{base} · {condition_label(condition)}", None))
+    if not entries:
+        return []
+    return [_point("bedingung", "Regel mit Bedingung trifft kein Bauteil",
+                   "Kein Bauteil der Klasse erfüllt die Bedingung – oft fehlt die Eigenschaft (IsExternal, "
+                   "LoadBearing) im IFC. Die Bauteile folgen der Regel ohne Bedingung.", entries, target="regeln")]
 
 
 def _storey_name_points(ifc: IfcModel) -> list[dict]:

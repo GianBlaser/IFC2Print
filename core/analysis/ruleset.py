@@ -61,6 +61,14 @@ DEFAULT_CSV = _SEED / "regeln.csv"
 SCALE_CSV = _SEED / "massstaebe.csv"
 DEFAULT_SCALE = "1:200"
 ALL_SCALES = "alle"                         # Spalte «scales» der regeln.csv: Zeile gilt für jeden Massstab
+# Massstab-Parameter, die in Blatt 03 (Tab «Massstab») einstellbar sind → (Beschriftung, kleinster, grösster Wert [mm]).
+# Der Standard bleibt massstaebe.csv; eigene Werte speichert die Datenbank je Massstab (Tabelle scale_override).
+EDITABLE_PARAMETERS = {
+    "min_thickness_wall_mm": ("Mindestdicke Wände", 0.4, 5.0),
+    "min_thickness_railing_mm": ("Dicke Geländer-Band", 0.4, 5.0),
+    "reveal_depth_mm": ("Laibungstiefe", 0.4, 5.0),
+    "min_core_reveal_mm": ("Kern hinter der Laibung", 0.4, 5.0),
+}
 # Bedingungen eines Schlüssels «Klasse[Bedingung]», in der Reihenfolge ihres Vorrangs → Beschriftung.
 # aussen/innen: IsExternal, tragend: LoadBearing (Pset_…Common), duenner_als:<mm>: kleinste Dicke am Modell [mm]
 CONDITIONS = {"duenner_als": "dünner als {} mm", "tragend": "tragend", "aussen": "aussen", "innen": "innen"}
@@ -128,6 +136,21 @@ def check_action(action: str) -> str:
     if action not in ACTIONS:
         raise ValueError(f"Unbekannte Aktion «{action}» – erlaubt: {', '.join(ACTIONS)}")
     return action
+
+
+def check_scale_parameter(name: str, value) -> float:
+    """Eigener Wert eines Massstab-Parameters als Zahl; ein nicht einstellbarer Name oder ein Wert ausserhalb
+    der Grenzen von ``EDITABLE_PARAMETERS`` ist ein Fehler."""
+    if name not in EDITABLE_PARAMETERS:
+        raise ValueError(f"Parameter «{name}» ist nicht einstellbar")
+    label, low, high = EDITABLE_PARAMETERS[name]
+    try:
+        number = math.nan if isinstance(value, bool) else float(value)
+    except (TypeError, ValueError):
+        number = math.nan
+    if not low <= number <= high:
+        raise ValueError(f"{label}: {low:g} bis {high:g} mm")
+    return number
 
 
 def split_key(key: str) -> tuple[str, str]:

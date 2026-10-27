@@ -1,6 +1,7 @@
 """Tests für das Regelwerk."""
 
 import re
+from dataclasses import fields
 from pathlib import Path
 
 import numpy as np
@@ -8,9 +9,10 @@ import pandas as pd
 import pytest
 
 from config import SCALES
-from core.analysis.ruleset import (ACTIONS, ALL_SCALES, check_action, check_key, condition_label, condition_met,
-                                   PRINTED_ACTIONS, row_scales, rule_class, rule_reason, Ruleset, ScaleParameters,
-                                   scale_reason, seed_rules, split_key, _seed_rule_rows)
+from core.analysis.ruleset import (ACTIONS, ALL_SCALES, check_action, check_key, check_scale_parameter, condition_label,
+                                   condition_met, EDITABLE_PARAMETERS, PRINTED_ACTIONS, row_scales, rule_class,
+                                   rule_reason, Ruleset, ScaleParameters, scale_reason, seed_rules, split_key,
+                                   _seed_rule_rows)
 from core.ifc.schema import schema_wrapper
 from core.openings.windows import OPENING_MODES
 from db.database import Database
@@ -695,3 +697,70 @@ def test_model_table_has_flags_and_conditions_apply(mfh_model):
     expected = walls["is_external"].map({True: "IfcWall[aussen]", False: "IfcWall"})
     assert list(out.loc[walls.index, "rule"]) == list(expected)
     assert set(out.loc[coverings.index, "rule"]) == {"IfcCovering"}                    # ohne IsExternal keine Bedingung
+
+
+# --- Einstellbare Massstab-Parameter ---
+
+@pytest.mark.parametrize("name", list(EDITABLE_PARAMETERS))
+def test_check_scale_parameter_accepts_bounds_and_numeric_strings(name):
+    _, low, high = EDITABLE_PARAMETERS[name]
+    assert check_scale_parameter(name, low) == low and check_scale_parameter(name, high) == high      # Grenzen inklusive
+    assert check_scale_parameter(name, (low + high) / 2) == (low + high) / 2
+    assert check_scale_parameter(name, f"{low}") == low and check_scale_parameter(name, f" {high} ") == high
+    assert check_scale_parameter(name, 2) == 2.0 and isinstance(check_scale_parameter(name, 2), float)
+
+
+@pytest.mark.parametrize("name", list(EDITABLE_PARAMETERS))
+def test_check_scale_parameter_rejects_values_outside_the_bounds(name):
+    _, low, high = EDITABLE_PARAMETERS[name]
+    for value in (low - 0.01, high + 0.01, 0, -1.0, float("inf"), "inf", str(high + 1)):
+        with pytest.raises(ValueError):
+            check_scale_parameter(name, value)
+
+
+@pytest.mark.parametrize("name", list(EDITABLE_PARAMETERS))
+@pytest.mark.parametrize("bad", ["abc", "", None, float("nan"), "nan", [1.0], True])
+def test_check_scale_parameter_rejects_non_numbers(name, bad):
+    with pytest.raises(ValueError):
+        check_scale_parameter(name, bad)
+
+
+@pytest.mark.parametrize("name", ["denominator", "qualities", "ruleset_name", "reveal_depth", "min_thickness_wall_mm ", ""])
+def test_check_scale_parameter_rejects_non_editable_names(name):
+    with pytest.raises(ValueError, match="nicht einstellbar"):
+        check_scale_parameter(name, 1.0)
+
+
+def test_editable_parameters_are_scale_parameter_fields():
+    field_names = {f.name for f in fields(ScaleParameters)}
+    for name, (label, low, high) in EDITABLE_PARAMETERS.items():
+        assert name in field_names and name.endswith("_mm")
+        assert label.strip() and 0 < low < high
+
+
+@pytest.mark.parametrize("scale", list(SCALES))
+def test_standard_values_are_within_editable_bounds(scale):
+    """Der Standard selbst ist immer einstellbar (sonst liesse sich ein zurückgesetzter Wert nicht mehr eingeben)."""
+    standard = ScaleParameters.default(scale)
+    for name, (_, low, high) in EDITABLE_PARAMETERS.items():
+        value = getattr(standard, name)
+        if value is not None:
+            assert low <= value <= high, (scale, name, value)
+            assert check_scale_parameter(name, value) == value
+
+
+# --- Prüfpunkt: Bedingung ohne Treffer ---
+
+@pytest.mark.skipif(not MFH_MODEL.exists(), reason="testdaten/ fehlt (nicht im Repo)")
+def test_condition_without_hit_is_a_check_point(mfh_model):
+    """IfcCovering hat im MFH kein IsExternal: IfcCovering[aussen] trifft nichts und wird gemeldet,
+    IfcWall[aussen] trifft und bleibt still; eine Bedingung auf eine Klasse ohne Bauteile ebenso."""
+    from core.analysis.check_points import check_points
+    rules = dict(Ruleset.default("1:200").rules, **{"IfcCovering[aussen]": "behalten", "IfcWall[aussen]": "verdicken",
+                                                    "IfcRamp[aussen]": "entfernen"})
+    ruleset = Ruleset(rules, {}, "1:200")
+    df = ruleset.classify(mfh_model.building_elements, mfh_model.schema_id)
+    points = [p for p in check_points(mfh_model, df, ruleset.rules) if p["kind"] == "bedingung"]
+    assert [p["entries"] for p in points] == [[("IfcCovering · aussen", None)]]
+    assert points[0]["category"] == "regeln" and points[0]["target"] == "regeln"
+    assert not [p for p in check_points(mfh_model, df) if p["kind"] == "bedingung"]     # ohne Regeln kein Punkt

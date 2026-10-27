@@ -119,7 +119,7 @@ class Session(Settings):
             self.df = pipeline.analyse(self.ifc, ruleset, self.scale_denominator, self.profile_data,
                                        self.exceptions, self.selected_storeys)
             self.angle = pipeline.alignment_angle(self.ifc, self.df) if self.align else 0.0
-            self.check_points = pipeline.check_points(self.ifc, self.df)
+            self.check_points = pipeline.check_points(self.ifc, self.df, ruleset.rules)
 
     def apply_setting(self, field_name: str, value) -> bool:
         """Setzt eine Einstellung und markiert das Ergebnis als veraltet; True, wenn neu analysiert wurde.

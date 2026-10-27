@@ -1,9 +1,11 @@
-"""Blatt 03 «Regeln», Tab «IFC-Klassen»: die Regel je IFC-Klasse wählen.
+"""Blatt 03 «Regeln», Tabs «IFC-Klassen» und «Massstab»: die Regel je IFC-Klasse und die Massstab-Parameter wählen.
 
 Zweck:   Listet die Regeln des Regelsets (= Massstab, gewählt in der Kopfzeile) nach Gruppen (Tragwerk, Erschliessung,
          Ausbau · Öffnungen, Sonstiges) mit einem Radio-Punkt je Aktion, dazu die Klassen des Modells ohne eigene Regel
          und eine Suche im ganzen IFC-Schema. «+» an einer Regel legt eine Regel mit Bedingung an (aussen, innen,
-         tragend, dünner als … mm; core/analysis/ruleset.py), «×» löscht sie wieder. Ist in der Matrix ein Geschoss gewählt, zeigen beide Tabs nur dessen
+         tragend, dünner als … mm; core/analysis/ruleset.py), «×» löscht sie wieder. Der Tab «Massstab» setzt eigene
+         Werte für Mindestdicken und Laibung (EDITABLE_PARAMETERS) des gewählten Massstabs. «Export» und «Import» in
+         der Fusszeile tragen die eigenen Regeln eines Massstabs als CSV in ein anderes Projekt oder eine andere Installation. Ist in der Matrix ein Geschoss gewählt, zeigen beide Tabs nur dessen
          Bauteile (oranger Filterhinweis). Im selben Blatt sitzt der Tab «Bauteile» (sheet_elements.py); ein Griff
          rechts ausserhalb des Blattes verstellt die Breite des aktiven Tabs.
 Eingabe: die Seite (page) mit Sitzung, Datenbank und Geschoss-Auswahl (page.floor_sel)
@@ -13,7 +15,8 @@ Ausgabe: das Blatt 03 (Element self.sheet); jede Regel wird gespeichert und das 
 import pandas as pd
 from nicegui import events, run, ui
 
-from core.analysis.ruleset import check_key, condition_label, rule_class, rule_reason, split_key
+from core.analysis.ruleset import (check_key, condition_label, EDITABLE_PARAMETERS, rule_class, rule_reason,
+                                   ScaleParameters, split_key)
 from core.ifc.schema import all_classes
 from ui.sheet_elements import SheetElements
 from ui.texts import GROUP_OF, GROUP_ORDER, GROUP_WITHOUT_RULE, HANDLE_JS
@@ -22,7 +25,14 @@ from ui.widgets import button, popup, radio_buttons, remember, saved, set_class,
 MAX_SCHEMA_ROWS = 40     # Treffer der Schema-Suche, die höchstens als Zeilen erscheinen
 SIMPLE_CONDITIONS = ("aussen", "innen", "tragend")       # ohne Wert; dazu «duenner_als:<mm>» mit Zahlenfeld
 THIN_DEFAULT_MM = 0.8                                     # Vorschlag im Zahlenfeld «dünner als … mm»
-TABS = (("klassen", "IFC-Klassen"), ("bauteile", "Bauteile"))
+TABS = (("klassen", "IFC-Klassen"), ("bauteile", "Bauteile"), ("massstab", "Massstab"))
+# Was ein Parameter im Druck bewirkt (Tab «Massstab»)
+PARAMETER_NOTES = {
+    "min_thickness_wall_mm": "Dünnere Wände werden als Paket aufgedickt; wirksam mindestens die Mindestwand des Druckers.",
+    "min_thickness_railing_mm": "Geländer mit der Regel «Band» werden als Scheibe dieser Dicke gedruckt.",
+    "reveal_depth_mm": "Tiefe vertiefter Fenster und Türen; flacher, wenn sonst der Kern zu dünn würde.",
+    "min_core_reveal_mm": "Wand, die hinter einer Laibung mindestens stehen bleibt (0.8 mm = zwei Druckbahnen).",
+}
 
 
 def class_name_label(name: str, note: str, in_model: bool = True, italic: bool = False) -> None:
@@ -58,7 +68,9 @@ class SheetRules:
             with ui.element("div").classes("tab-inhalt") as classes_tab:
                 self._classes_tab()
             self.elements = SheetElements(page)
-            self.tabs = {"klassen": classes_tab, "bauteile": self.elements.tab}
+            with ui.element("div").classes("tab-inhalt") as scale_tab:
+                self.parameter_list()
+            self.tabs = {"klassen": classes_tab, "bauteile": self.elements.tab, "massstab": scale_tab}
             with ui.element("div").classes("griff").on("mousedown", js_handler=HANDLE_JS):
                 for _ in range(3):
                     tag("i")
@@ -76,7 +88,70 @@ class SheetRules:
         self.rule_list()
         with ui.element("div").classes("sheet-foot"):
             self.footer_text = tag("p", f"Regeln für {self.s.scale} – ein Klick ändert sie sofort.", "hint")
-            button("pill-knopf", self._reset_rules, text="Auf Standard zurücksetzen").mark("regeln-zuruecksetzen")
+            with ui.element("div").classes("regel-knoepfe"):
+                button("pill-knopf klein", self._export_rules, text="Export").props(
+                    'title="Eigene Regeln dieses Massstabs als CSV"').mark("regeln-export")
+                self.rules_upload = ui.upload(auto_upload=True, on_upload=self._import_rules).props(
+                    'accept=".csv"').classes("hidden")
+                button("pill-knopf klein", lambda: self.rules_upload.run_method("pickFiles"), text="Import").props(
+                    'title="Regeln aus einer CSV übernehmen (Format wie der Export)"').mark("regeln-import")
+                button("pill-knopf klein", self._reset_rules, text="Standard").props(
+                    'title="Alle Regeln dieses Massstabs auf den Standard zurücksetzen"').mark("regeln-zuruecksetzen")
+
+    # --- Tab «Massstab» -----------------------------------------------------------------------
+
+    @ui.refreshable_method
+    def parameter_list(self) -> None:
+        """Einstellbare Parameter des gewählten Massstabs: Wert, Standard und Zurücksetzen je Parameter."""
+        scale = self.s.ruleset_name
+        standard = ScaleParameters.default(scale)
+        own = self.s.db.scale_overrides(scale)
+        current = self.s.parameter
+        with ui.element("div").classes("parameter-liste duenn"):
+            tag("p", f"Massstab {scale} · Modellmass in mm. Eigene Werte gelten nur für diesen Massstab.", "hint")
+            for name, (label, low, high) in EDITABLE_PARAMETERS.items():
+                default = getattr(standard, name)
+                with ui.element("div").classes("parameter-zeile" + (" eigen" if name in own else "")):
+                    with ui.element("div").classes("parameter-text"):
+                        tag("b", label)
+                        tag("small", PARAMETER_NOTES.get(name, ""))
+                    if default is None:
+                        tag("span", "keine Bänder bei diesem Massstab", "hint")
+                        continue
+                    ui.number(value=getattr(current, name), min=low, max=high, step=0.1, format="%.1f",
+                              on_change=lambda e, n=name: self._set_parameter(n, e.value)).props(
+                        "dense outlined debounce=700 suffix=mm").classes("parameter-zahl").mark(f"parameter-{name}")
+                    with ui.element("span").classes("parameter-standard"):
+                        tag("small", f"Standard {default:g}")
+                        if name in own:
+                            button("regel-extra", lambda n=name: self._reset_parameter(n), text="↺").props(
+                                'title="Auf Standard zurücksetzen"').mark(f"parameter-zurueck-{name}")
+        with ui.element("div").classes("sheet-foot"):
+            tag("p", "Ein neuer Wert wirkt sofort auf Analyse und Erzeugung.", "hint")
+            button("pill-knopf", lambda: self._reset_parameter(None), text="Auf Standard zurücksetzen").mark(
+                "parameter-zuruecksetzen")
+
+    async def _set_parameter(self, name: str, value) -> None:
+        if value is None or value == getattr(self.s.parameter, name):
+            return
+        try:
+            self.s.db.set_scale_parameter(self.s.ruleset_name, name, value)
+        except ValueError as error:
+            self.page.show_message(str(error), "warn")
+            self.parameter_list.refresh()
+            return
+        await self._parameters_changed()
+
+    async def _reset_parameter(self, name: str | None) -> None:
+        self.s.db.reset_scale_parameters(self.s.ruleset_name, name)
+        if name is None:
+            self.page.show_message(f"Parameter {self.s.ruleset_name} auf Standard zurückgesetzt.", "ok")
+        await self._parameters_changed()
+
+    async def _parameters_changed(self) -> None:
+        self.parameter_list.refresh()
+        self.page.header.content.refresh()       # Feld «Massstab» nennt Mindestdicke und Laibung
+        await self.set_rule(None, None)          # neu analysieren: Mindestdicken wirken auf Pakete und Status
 
     # --- Tabs und Filterhinweis --------------------------------------------------------------
 
@@ -121,6 +196,23 @@ class SheetRules:
     async def _reset_rules(self) -> None:
         self.s.db.reset_rules(self.s.ruleset_name)
         self.page.show_message(f"Regeln {self.s.ruleset_name} auf Standard zurückgesetzt.", "ok")
+        await self.set_rule(None, None)
+
+    def _export_rules(self) -> None:
+        scale = self.s.ruleset_name
+        if not self.s.db.own_rules(scale):
+            self.page.show_message(f"Keine eigenen Regeln für {scale} – alles Standard.", "info")
+            return
+        ui.download(self.s.db.export_rules(scale).encode("utf-8"), f"regeln_{scale.replace(':', '-')}.csv")
+
+    async def _import_rules(self, e: events.UploadEventArguments) -> None:
+        self.rules_upload.reset()
+        try:
+            n = self.s.db.import_rules(self.s.ruleset_name, (await e.file.read()).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as error:
+            self.page.show_message(f"Import abgebrochen, nichts geändert – {error}", "err")
+            return
+        self.page.show_message(f"{n} Regeln für {self.s.ruleset_name} übernommen.", "ok")
         await self.set_rule(None, None)
 
     def _search_rules(self, e: events.ValueChangeEventArguments) -> None:

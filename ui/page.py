@@ -257,4 +257,6 @@ class Page:
             return
         if field_name == "scale" and self.s.ifc is None:   # mit Modell zeichnet show_analysis sie neu
             self.sheet_rules.rule_list.refresh()
+        if field_name == "scale":
+            self.sheet_rules.parameter_list.refresh()
         self.header.show_alignment()   # Qualität, Öffnungen, Steckverbinder je Massstab; Ausrichtwinkel

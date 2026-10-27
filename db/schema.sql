@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS scale (
     door_default             TEXT NOT NULL
 );
 
+-- Eigene Werte einzelner Massstab-Parameter (core.analysis.ruleset.EDITABLE_PARAMETERS); der Standard bleibt in «scale»
+CREATE TABLE IF NOT EXISTS scale_override (
+    ruleset_name TEXT NOT NULL,
+    parameter    TEXT NOT NULL,
+    value        REAL NOT NULL,
+    PRIMARY KEY (ruleset_name, parameter)
+);
+
 CREATE TABLE IF NOT EXISTS printer_profile (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     name              TEXT NOT NULL UNIQUE,

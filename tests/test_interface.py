@@ -281,6 +281,27 @@ async def test_condition_rule_add_and_delete(user: User):
     await asyncio.sleep(1)          # Analyse im Hintergrund fertig laufen lassen
 
 
+async def test_scale_parameter_set_and_reset(user: User):
+    """Tab «Massstab»: eigener Wert für die Laibungstiefe → «↺» erscheint; «Auf Standard zurücksetzen» entfernt ihn."""
+    await user.open("/")
+    await user.should_see(marker="geschoss-00_groundfloor", retries=50)
+    user.find(marker="parameter-reveal_depth_mm").clear().type("0.8")
+    await user.should_see(marker="parameter-zurueck-reveal_depth_mm", retries=50)
+    user.find(marker="parameter-zuruecksetzen").click()
+    await user.should_not_see(marker="parameter-zurueck-reveal_depth_mm", retries=50)
+    await asyncio.sleep(1)          # Analyse im Hintergrund fertig laufen lassen
+
+
+async def test_export_without_own_rules_says_so(user: User):
+    """«Export» ohne eigene Regeln lädt nichts herunter, sondern meldet, dass alles Standard ist."""
+    await user.open("/")
+    await user.should_see(marker="geschoss-00_groundfloor", retries=50)
+    user.find(marker="regeln-zuruecksetzen").click()               # andere Tests teilen die Datenbank
+    await user.should_see("auf Standard zurückgesetzt", retries=50)
+    user.find(marker="regeln-export").click()
+    await user.should_see("alles Standard")
+
+
 def test_condition_rule_acts_on_matching_elements_only(session):
     """IfcSlab[aussen] → entfernen trifft nur die Decke mit IsExternal = True; die übrigen behalten ihre Regel
     (die Dachplatten im Testmodell die von IfcRoof)."""

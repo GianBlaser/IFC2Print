@@ -1,6 +1,8 @@
 """Tests für die Datenbank-Schicht."""
 
 import sqlite3
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -358,4 +360,134 @@ def test_delete_rule_of_unknown_key_changes_nothing(db):
     before = db.rules("1:200")
     db.delete_rule("1:200", "IfcWall[aussen]")
     db.delete_rule("1:333", "IfcWall")
+    assert db.rules("1:200") == before
+
+
+# --- Einstellbare Massstab-Parameter ---
+
+IFC_MODEL = Path(__file__).parent.parent / "testdaten" / "Building-Architecture-IFC2x3.ifc"
+
+
+def test_set_scale_parameter_changes_only_that_scale_and_parameter(db):
+    before_200, before_100 = db.scale_parameters("1:200"), db.scale_parameters("1:100")
+    assert db.scale_overrides("1:200") == {}
+    db.set_scale_parameter("1:200", "min_thickness_wall_mm", 2.0)
+    assert db.scale_overrides("1:200") == {"min_thickness_wall_mm": 2.0}
+    assert db.scale_parameters("1:200") == {**before_200, "min_thickness_wall_mm": 2.0}         # sonst alles wie vorher
+    assert db.scale_parameters("1:200")["min_thickness_wall_mm"] != before_200["min_thickness_wall_mm"]
+    assert db.scale_parameters("1:100") == before_100 and db.scale_overrides("1:100") == {}
+    own = ScaleParameters.from_row(db.scale_parameters("1:200"))
+    assert own.min_thickness_wall_mm == 2.0
+    assert own == replace(ScaleParameters.default("1:200"), min_thickness_wall_mm=2.0)
+    assert ScaleParameters.from_row(db.scale_parameters("1:100")) == ScaleParameters.default("1:100")
+
+
+def test_scale_override_survives_reopen_while_the_standard_is_reseeded(db, file_path):
+    """Der Standard (Tabelle scale) kommt bei jedem Start neu aus der CSV, der eigene Wert bleibt."""
+    db.set_scale_parameter("1:200", "reveal_depth_mm", 1.5)
+    with db._lock, db._conn:
+        db._conn.execute("UPDATE scale SET reveal_depth_mm = 9.9, min_thickness_wall_mm = 9.9 WHERE ruleset_name = '1:200'")
+    db.close()
+    db2 = Database(file_path)
+    standard = ScaleParameters.default("1:200")
+    assert db2.scale_overrides("1:200") == {"reveal_depth_mm": 1.5}
+    assert db2.scale_parameters("1:200")["reveal_depth_mm"] == 1.5                               # eigener Wert
+    assert db2.scale_parameters("1:200")["min_thickness_wall_mm"] == standard.min_thickness_wall_mm   # Standard neu
+    db2.close()
+
+
+@pytest.mark.parametrize("parameter, value", [
+    ("min_thickness_wall_mm", 0.1), ("min_thickness_wall_mm", 5.5), ("min_thickness_wall_mm", "abc"),
+    ("min_thickness_wall_mm", None), ("min_thickness_wall_mm", float("nan")), ("min_thickness_wall_mm", ""),
+    ("denominator", 1.0), ("qualities", 1.0), ("unbekannt_mm", 1.0)])
+def test_set_scale_parameter_with_invalid_value_stores_nothing(db, parameter, value):
+    db.set_scale_parameter("1:200", "reveal_depth_mm", 1.5)                                      # bestehender Wert bleibt
+    before = db.scale_parameters("1:200")
+    with pytest.raises(ValueError):
+        db.set_scale_parameter("1:200", parameter, value)
+    assert db.scale_overrides("1:200") == {"reveal_depth_mm": 1.5}
+    assert db.scale_parameters("1:200") == before
+
+
+def test_reset_scale_parameters_deletes_one_or_all(db):
+    standard = db.scale_parameters("1:200")
+    for scale in ("1:200", "1:100"):
+        db.set_scale_parameter(scale, "min_thickness_wall_mm", 2.0)
+        db.set_scale_parameter(scale, "reveal_depth_mm", 1.5)
+    db.reset_scale_parameters("1:200", "min_thickness_wall_mm")                                   # nur dieser Parameter
+    assert db.scale_overrides("1:200") == {"reveal_depth_mm": 1.5}
+    assert db.scale_parameters("1:200")["min_thickness_wall_mm"] == standard["min_thickness_wall_mm"]
+    assert db.scale_overrides("1:100") == {"min_thickness_wall_mm": 2.0, "reveal_depth_mm": 1.5}
+    db.set_scale_parameter("1:200", "min_thickness_wall_mm", 2.0)
+    db.reset_scale_parameters("1:200")                                                            # alle dieses Massstabs
+    assert db.scale_overrides("1:200") == {} and db.scale_parameters("1:200") == standard
+    assert db.scale_overrides("1:100") == {"min_thickness_wall_mm": 2.0, "reveal_depth_mm": 1.5}  # andere unberührt
+    db.reset_scale_parameters("1:200")                                                            # nichts zu löschen: kein Fehler
+    db.reset_scale_parameters("1:200", "min_core_reveal_mm")
+
+
+def test_set_scale_parameter_twice_keeps_one_override(db):
+    db.set_scale_parameter("1:200", "min_thickness_wall_mm", 2.0)
+    db.set_scale_parameter("1:200", "min_thickness_wall_mm", "3.5")
+    assert db.scale_overrides("1:200") == {"min_thickness_wall_mm": 3.5}
+    assert db.scale_parameters("1:200")["min_thickness_wall_mm"] == 3.5
+    with db._lock:
+        count = db._conn.execute("SELECT COUNT(*) FROM scale_override").fetchone()[0]
+    assert count == 1
+
+
+@pytest.mark.skipif(not IFC_MODEL.exists(), reason="testdaten/ fehlt (nicht im Repo)")
+def test_session_analysis_uses_the_scale_override(tmp_path):
+    """Die Sitzung baut ihre Parameter aus Standard plus eigenem Wert; ein Wert eines anderen Massstabs gilt nicht."""
+    from ui.state import Session
+    session = Session(Database(tmp_path / "ui.db"))
+    session.load_bytes(IFC_MODEL.read_bytes(), IFC_MODEL.name)
+    standard = session.parameter.min_thickness_wall_mm
+    other = next(m for m in session.db.rule_sets() if m != session.ruleset_name)
+    session.db.set_scale_parameter(other, "min_thickness_wall_mm", 4.0)
+    session.analyse()
+    assert session.parameter.min_thickness_wall_mm == standard                                    # fremder Massstab
+    session.db.set_scale_parameter(session.ruleset_name, "min_thickness_wall_mm", 2.0)
+    session.analyse()
+    assert session.parameter.min_thickness_wall_mm == 2.0
+    assert session.parameter.reveal_depth_mm == ScaleParameters.default(session.ruleset_name).reveal_depth_mm
+    session.db.reset_scale_parameters(session.ruleset_name)
+    assert session.parameter.min_thickness_wall_mm == standard
+    session.db.close()
+
+
+# --- Eigene Regeln als CSV ---
+
+def test_export_contains_only_own_rules(db):
+    """Export: nur Regeln, die vom Standard abweichen, im Format der regeln.csv (ohne Begründung)."""
+    assert db.export_rules("1:200").splitlines() == ["scales,ifc_class_name,action,category"]
+    db.set_action("1:200", "IfcStair", "entfernen")
+    db.set_action("1:200", "IfcCovering[aussen]", "behalten", "Ausbau")
+    db.set_action("1:200", "IfcWall", "behalten")                      # = Standard → nicht im Export
+    assert db.export_rules("1:200").splitlines()[1:] == ["1:200,IfcCovering[aussen],behalten,Ausbau",
+                                                        "1:200,IfcStair,entfernen,Treppe"]
+
+
+def test_import_round_trip_and_scale_filter(db, tmp_path):
+    """Import des Exports in eine frische Datenbank; Zeilen anderer Massstäbe werden übergangen."""
+    db.set_action("1:200", "IfcStair", "entfernen")
+    text = db.export_rules("1:200")
+    other = Database(tmp_path / "andere.db")
+    assert other.import_rules("1:100", text) == 0
+    assert other.import_rules("1:200", text) == 1
+    assert _actions(other, "1:200")["IfcStair"] == "entfernen"
+    assert other.import_rules("1:50", "ifc_class_name,action\nIfcRailing,entfernen\n") == 1     # ohne «scales»: gilt
+    assert other.import_rules("1:50", "scales,ifc_class_name,action\nalle,IfcStair,entfernen\n") == 1
+    other.close()
+
+
+@pytest.mark.parametrize("text", ["ifc_class_name,action\nIfcStair,entfernen\nIfcWall,drucken\n",
+                                  "ifc_class_name,action\nIfcStair,entfernen\nIfcWall[unbekannt],behalten\n",
+                                  "scales,ifc_class_name,action\n1:200,IfcStair,entfernen\n1:250,IfcWall,behalten\n",
+                                  "klasse,aktion\nIfcStair,entfernen\n"])
+def test_import_with_error_changes_nothing(db, text):
+    """Eine fehlerhafte Zeile bricht den Import ab, bevor etwas gespeichert ist – auch die gültige davor nicht."""
+    before = db.rules("1:200")
+    with pytest.raises(ValueError):
+        db.import_rules("1:200", text)
     assert db.rules("1:200") == before
