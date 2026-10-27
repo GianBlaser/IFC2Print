@@ -1,10 +1,16 @@
 """Tests für das Regelwerk."""
 
+import csv
+import re
+
 import pandas as pd
 import pytest
 
 from config import SCALES
-from core.analysis.ruleset import check_action, PRINTED_ACTIONS, rule_reason, Ruleset, scale_reason
+from core.analysis.ruleset import (ACTIONS, ALL_SCALES, check_action, PRINTED_ACTIONS, row_scales, rule_reason, Ruleset,
+                                   ScaleParameters, scale_reason, seed_rules, _seed_rule_rows)
+from core.ifc.schema import schema_wrapper
+from core.openings.windows import OPENING_MODES
 from db.database import Database
 
 
@@ -203,3 +209,106 @@ def test_reason_stays_out_of_the_database(tmp_path):
     assert "reason" not in db.rules("1:200")[0]
     assert "reason" not in db.scale_parameters("1:200")
     db.close()
+
+
+# --- Seed-Daten ---
+
+CORE_KEYS = ("IfcWall", "IfcSlab", "IfcRoof", "IfcWindow", "IfcDoor")
+
+
+def _in_ifc_schema(name: str) -> bool:
+    """IFC-Klasse in mindestens einem der Schemas."""
+    for schema in ("IFC2X3", "IFC4", "IFC4X3_ADD2"):
+        try:
+            schema_wrapper.schema_by_name(schema).declaration_by_name(name)
+            return True
+        except (RuntimeError, ValueError, KeyError):
+            continue
+    return False
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_seed_actions_are_known(scale):
+    """Jede Aktion der Seed-Regeln ist eine erlaubte Aktion."""
+    rules = Ruleset.default(scale).rules
+    assert rules
+    assert {key: a for key, a in rules.items() if a not in ACTIONS} == {}
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_seed_rules_have_reason(scale):
+    """Jede Regel hat eine Begründung (keine leere, kein «Eigene Regel»)."""
+    ruleset = Ruleset.default(scale)
+    bad = [key for key in ruleset.rules
+           if not ruleset.reason(key).strip() or ruleset.reason(key).startswith("Eigene Regel")]
+    assert bad == []
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_seed_rules_have_category(scale):
+    """Jede Regel hat eine Kategorie."""
+    ruleset = Ruleset.default(scale)
+    assert [key for key in ruleset.rules if not ruleset.categories.get(key, "").strip()] == []
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_seed_class_names_exist_in_schema(scale):
+    """Alle IFC-Klassen in den Regelschlüsseln («Klasse», «Klasse.TYP», «Ganzes/Teil») gibt es in einem Schema."""
+    unknown = [key for key in Ruleset.default(scale).rules
+               if not all(_in_ifc_schema(part.split(".")[0]) for part in key.split("/"))]
+    assert unknown == []
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_seed_contains_core_keys(scale):
+    """Jeder Massstab regelt mindestens Wand, Decke, Dach, Fenster und Tür."""
+    assert set(CORE_KEYS) <= set(Ruleset.default(scale).rules)
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_seed_scale_parameters_plausible(scale):
+    """Massstabsparameter: Nenner passt zum Namen, Masse positiv, Standardwerte erlaubt."""
+    p = ScaleParameters.default(scale)
+    assert p.denominator == int(re.fullmatch(r"1:(\d+)", scale).group(1))
+    assert p.reveal_depth_mm > 0
+    assert p.min_core_reveal_mm > 0
+    assert p.min_thickness_wall_mm >= p.min_core_reveal_mm
+    assert p.quality_default in p.qualities
+    assert p.window_default in OPENING_MODES
+    assert p.door_default in OPENING_MODES
+    assert scale_reason(scale).strip()
+
+
+def test_seed_rows_name_known_scales():
+    """Spalte «scales»: «alle» oder bekannte Massstäbe, keiner doppelt."""
+    for row in _seed_rule_rows():
+        scales = row_scales(row)
+        assert len(scales) == len(set(scales)), row
+
+
+def test_seed_deviation_differs_from_base():
+    """Eine Abweichung ändert Aktion, Kategorie oder Begründung – sonst gehört der Massstab in die «alle»-Zeile."""
+    base = {z["ifc_class_name"]: z for z in _seed_rule_rows() if z["scales"] == ALL_SCALES}
+    fields = ("action", "category", "reason")
+    same = [(z["scales"], z["ifc_class_name"]) for z in _seed_rule_rows()
+            if z["scales"] != ALL_SCALES and z["ifc_class_name"] in base
+            and all(z[f] == base[z["ifc_class_name"]][f] for f in fields)]
+    assert same == []
+
+
+def test_seed_rules_most_specific_row_wins(monkeypatch):
+    """Die Zeile mit den wenigsten Massstäben gewinnt; zwei gleich spezifische Zeilen sind ein Fehler."""
+    import core.analysis.ruleset as ruleset_module
+    rows = ({"scales": "alle", "ifc_class_name": "IfcStair", "action": "behalten", "category": "Treppe", "reason": "a"},
+            {"scales": "1:500", "ifc_class_name": "IfcStair", "action": "entfernen", "category": "Treppe", "reason": "b"})
+    monkeypatch.setattr(ruleset_module, "_seed_rule_rows", lambda: rows)
+    ruleset_module._seed_rules.cache_clear()
+    try:
+        assert [z["action"] for z in seed_rules("1:500")] == ["entfernen"]
+        assert [z["action"] for z in seed_rules("1:200")] == ["behalten"]
+        monkeypatch.setattr(ruleset_module, "_seed_rule_rows", lambda: rows + ({**rows[1], "action": "behalten"},))
+        ruleset_module._seed_rules.cache_clear()
+        with pytest.raises(ValueError, match="doppelt"):
+            seed_rules("1:500")
+    finally:
+        ruleset_module._seed_rules.cache_clear()

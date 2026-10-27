@@ -47,7 +47,7 @@ Was neben den Klassenregeln vom Massstab abhängt (Modellmass, mm). Defaults = 1
 
 Code: [core/analysis/ruleset.py](../core/analysis/ruleset.py) (`Ruleset`) · Werte und Begründungen: [db/seed/regeln.csv](../db/seed/regeln.csv) · Aktionen, Vererbung und Aggregate: [README › Regeln](../README.md#regeln)
 
-Standard je Massstab; eigene Regeln speichert die Datenbank. – = keine eigene Regel, es gilt die Regel der Oberklasse.
+Standard je Massstab; eigene Regeln speichert die Datenbank. – = keine eigene Regel, es gilt die Regel der Oberklasse. In regeln.csv steht jede Regel einmal für «alle» Massstäbe, dazu nur die Abweichungen einzelner Massstäbe.
 
 | Regel | Kategorie | 1:500 | 1:200 | 1:100 | 1:50 | Begründung |
 |---|---|---|---|---|---|---|
@@ -72,7 +72,7 @@ Standard je Massstab; eigene Regeln speichert die Datenbank. – = keine eigene 
 | `IfcDoor` | Öffnung | entfernen | entfernen | entfernen | entfernen | Türen werden nicht als Bauteil gedruckt. Die Öffnung in der Wand wird nach dem Öffnungsmodus geschlossen, vertieft oder ausgeschnitten. |
 | `IfcCovering` | Ausbau | entfernen | entfernen | entfernen | entfernen | Bodenbeläge, Deckenverkleidungen und Dämmungen im Innern sind dünn und am Modell nicht sichtbar. |
 | `IfcCovering.CLADDING` | Fassade | behalten | behalten | behalten | behalten | Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst. |
-| `IfcCovering.ROOFING` | Dach | entfernen | entfernen | behalten | behalten | **1:500:** Der Dachaufbau ändert die Dachform bei 1:500 kaum.<br>**1:200:** Der Dachaufbau ändert die Dachform bei 1:200 kaum.<br>**1:100, 1:50:** Ab 1:100 trägt der Dachaufbau sichtbar zur Dachdicke bei; er wird mit dem Dach zum Paket zusammengefasst. |
+| `IfcCovering.ROOFING` | Dach | entfernen | entfernen | behalten | behalten | **1:500, 1:200:** Der Dachaufbau ändert die Dachform bei 1:500 und 1:200 kaum.<br>**1:100, 1:50:** Ab 1:100 trägt der Dachaufbau sichtbar zur Dachdicke bei; er wird mit dem Dach zum Paket zusammengefasst. |
 | `IfcFurnishingElement` | Möblierung | entfernen | entfernen | entfernen | entfernen | Möbel gehören nicht ins Massstabsmodell. |
 | `IfcFlowTerminal` | Haustechnik | entfernen | entfernen | entfernen | entfernen | Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell. |
 | `IfcBuildingElementProxy` | Sonstiges | entfernen | entfernen | entfernen | entfernen | Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen. |

@@ -14,7 +14,6 @@ Ausgabe: docs/REFERENZ.md (Markdown, Links relativ zu docs/)
 
 import argparse
 import ast
-import csv
 import io
 import re
 import sys
@@ -25,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))   # Projektordner importierbar
 
 from config import SCALES
-from core.analysis.ruleset import DEFAULT_CSV, SCALE_CSV, ScaleParameters, scale_reason
+from core.analysis.ruleset import ScaleParameters, scale_reason, seed_rules
 
 TARGET = ROOT / "docs" / "REFERENZ.md"
 SECTION = re.compile(r"^# --- (.+?) -+$")
@@ -169,16 +168,15 @@ def _scale_section(names: set[str]) -> list[str]:
 
 
 def _rule_section(names: set[str]) -> list[str]:
-    with DEFAULT_CSV.open(encoding="utf-8", newline="") as f:
-        seed = list(csv.DictReader(f))
     rules: dict[str, dict[str, dict]] = {}
-    for row in seed:
+    for row in (z for s in SCALES for z in seed_rules(s)):
         rules.setdefault(row["ifc_class_name"], {})[row["ruleset_name"]] = row
     lines = ["## Klassenregeln", "",
              f"Code: {_link('core/analysis/ruleset.py')} (`Ruleset`) · Werte und Begründungen: {_link('db/seed/regeln.csv')}"
              f" · Aktionen, Vererbung und Aggregate: [README › Regeln](../README.md#regeln)", "",
              f"Standard je Massstab; eigene Regeln speichert die Datenbank. {NO_RULE} = keine eigene Regel, es gilt die "
-             "Regel der Oberklasse.", "",
+             "Regel der Oberklasse. In regeln.csv steht jede Regel einmal für «alle» Massstäbe, dazu nur die Abweichungen "
+             "einzelner Massstäbe.", "",
              "| Regel | Kategorie | " + " | ".join(SCALES) + " | Begründung |", "|---|---|" + "---|" * len(SCALES) + "---|"]
     for key, by_scale in rules.items():
         reasons: dict[str, list[str]] = {}

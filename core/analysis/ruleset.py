@@ -24,11 +24,15 @@ ob ein Dach gedruckt wird, soll nicht davon abhängen, wie das Autorentool es ze
 Feiner steuert ein Schlüssel «Ganzes/Teil» (z.B. «IfcRoof/IfcMember»).
 Die Vererbungskette liefert core/ifc/schema.py.
 
+Die Standardregeln stehen in db/seed/regeln.csv: eine Zeile gilt für die Massstäbe der Spalte ``scales``
+(«alle» oder eine Liste «1:500,1:200»). Gibt es für einen Schlüssel mehrere Zeilen, gewinnt die mit den wenigsten
+Massstäben – so steht der Normalfall einmal da und jeder Massstab nur mit seinen Abweichungen (``seed_rules``).
+
 Die Begründung jeder Standardregel und jedes Massstabs steht in der Spalte ``reason`` der Seed-CSVs.
 Sie gehört zum Standard und wird nicht in die Datenbank kopiert: Weicht eine Regel vom Standard ab,
 heisst es «Eigene Regel» (``rule_reason``).
 
-Eingabe: Regelzeilen (db/seed/regeln.csv oder Datenbank) und die Bauteiltabelle (DataFrame)
+Eingabe: Regelzeilen (``seed_rules`` aus db/seed/regeln.csv oder Datenbank) und die Bauteiltabelle (DataFrame)
 Ausgabe: Aktion, Kategorie und wirksamer Regelschlüssel je Bauteil (``Ruleset.classify``)
 """
 
@@ -39,6 +43,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from config import SCALES
 from core.ifc.schema import class_chain
 
 ACTIONS = ("behalten", "verdicken", "fuellen", "band", "entfernen")
@@ -47,6 +52,7 @@ _SEED = Path(__file__).resolve().parents[2] / "db" / "seed"      # Projektwurzel
 DEFAULT_CSV = _SEED / "regeln.csv"
 SCALE_CSV = _SEED / "massstaebe.csv"
 DEFAULT_SCALE = "1:200"
+ALL_SCALES = "alle"                         # Spalte «scales» der regeln.csv: Zeile gilt für jeden Massstab
 # Regelsets vor der Umstellung auf Massstab-Regelwerke (Okt. 2026)
 LEGACY_RULE_SETS = {"Standard 1:200": "1:200", "Volumen 1:500": "1:500"}
 
@@ -112,11 +118,50 @@ def check_action(action: str) -> str:
 
 
 @lru_cache(maxsize=None)
-def _standard_rules(scale: str) -> dict[str, tuple[str, str]]:
-    """Standardregeln eines Massstabs aus der Seed-CSV: Regelschlüssel → (Aktion, Begründung)."""
+def _seed_rule_rows() -> tuple[dict, ...]:
     with DEFAULT_CSV.open(encoding="utf-8", newline="") as f:
-        return {z["ifc_class_name"]: (z["action"], z.get("reason") or "")
-                for z in csv.DictReader(f) if z["ruleset_name"] == scale}
+        return tuple(csv.DictReader(f))
+
+
+def row_scales(row: dict) -> tuple[str, ...]:
+    """Massstäbe einer Zeile der regeln.csv («alle» oder «1:500,1:200»); ein unbekannter Massstab ist ein Fehler."""
+    if row["scales"] == ALL_SCALES:
+        return tuple(SCALES)
+    scales = tuple(s.strip() for s in row["scales"].split(","))
+    if unknown := [s for s in scales if s not in SCALES]:
+        raise ValueError(f"regeln.csv, {row['ifc_class_name']}: unbekannter Massstab {', '.join(unknown)}")
+    return scales
+
+
+@lru_cache(maxsize=None)
+def _seed_rules(scale: str) -> tuple[dict, ...]:
+    chosen: dict[str, tuple[int, dict]] = {}
+    for row in _seed_rule_rows():
+        scales = row_scales(row)
+        if scale not in scales:
+            continue
+        key = row["ifc_class_name"]
+        if key in chosen and chosen[key][0] == len(scales):
+            raise ValueError(f"regeln.csv: «{key}» für {scale} doppelt (gleich viele Massstäbe)")
+        if key not in chosen or len(scales) < chosen[key][0]:
+            chosen[key] = (len(scales), row)
+    return tuple({"ruleset_name": scale, "ifc_class_name": key, "action": row["action"],
+                  "category": row["category"], "reason": row.get("reason") or ""}
+                 for key, (_, row) in chosen.items())
+
+
+def seed_rules(scale: str) -> list[dict]:
+    """Standardregeln eines Massstabs: [{ruleset_name, ifc_class_name, action, category, reason}].
+
+    Je Schlüssel gilt die Zeile mit den wenigsten Massstäben (Abweichung vor «alle»). Einzige Stelle, die
+    regeln.csv auswertet – für Ruleset.default, rule_reason, die Datenbank und docs/REFERENZ.md.
+    """
+    return [dict(z) for z in _seed_rules(LEGACY_RULE_SETS.get(scale, scale))]
+
+
+def _standard_rules(scale: str) -> dict[str, tuple[str, str]]:
+    """Standardregeln eines Massstabs: Regelschlüssel → (Aktion, Begründung)."""
+    return {z["ifc_class_name"]: (z["action"], z["reason"]) for z in _seed_rules(scale)}
 
 
 def rule_reason(scale: str, key: str, action: str) -> str:
@@ -158,8 +203,7 @@ class Ruleset:
     def default(cls, scale: str = DEFAULT_SCALE) -> "Ruleset":
         """Regelwerk direkt aus den Seed-CSVs (ohne Datenbank, z.B. für Skripte und Tests)."""
         scale = LEGACY_RULE_SETS.get(scale, scale)
-        with DEFAULT_CSV.open(encoding="utf-8", newline="") as f:
-            rows = [z for z in csv.DictReader(f) if z["ruleset_name"] == scale]
+        rows = seed_rules(scale)
         if not rows:
             raise ValueError(f"Unbekannter Massstab «{scale}»")
         return cls.from_rows(rows, scale)

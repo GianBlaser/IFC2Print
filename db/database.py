@@ -19,12 +19,12 @@ from datetime import datetime
 from pathlib import Path
 
 from config import SCALES
-from core.analysis.ruleset import check_action, LEGACY_RULE_SETS
+from core.analysis.ruleset import check_action, LEGACY_RULE_SETS, seed_rules
 
 _HERE = Path(__file__).parent
 DEFAULT_PATH = _HERE / "regeln.db"
-_SEEDS = {"scale": "massstaebe.csv", "rule": "regeln.csv", "printer_profile": "profile.csv",
-          "material": "material.csv"}
+# Die Regeln kommen nicht direkt aus regeln.csv, sondern je Massstab aufgelöst (ruleset.seed_rules)
+_SEEDS = {"scale": "massstaebe.csv", "printer_profile": "profile.csv", "material": "material.csv"}
 _LOG = logging.getLogger(__name__)
 # Seed-Spalten ohne Gegenstück in der Datenbank: die Begründung gehört zum Standard (ruleset.rule_reason)
 _CSV_ONLY = {"reason"}
@@ -73,6 +73,8 @@ class Database:
             self._add_columns("printer_profile", {"clearance_mm": "REAL NOT NULL DEFAULT 0.20"})
             for table, file in _SEEDS.items():
                 self._seed(table, _HERE / "seed" / file, replace=table == "scale")
+            for scale in SCALES:
+                self._insert("rule", seed_rules(scale))
 
     def _migrate_to_english(self) -> None:
         """Datenbanken bis Oktober 2026 hatten deutsche Tabellen- und Spaltennamen: umbenennen, Daten bleiben."""
@@ -125,11 +127,13 @@ class Database:
         return self._conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                                   (name,)).fetchone() is not None
 
-    def _seed(self, table: str, csv_path: Path, only_rule_set: str | None = None, replace: bool = False) -> None:
+    def _seed(self, table: str, csv_path: Path, replace: bool = False) -> None:
         """CSV einspielen: fehlende Zeilen ergänzen, mit ``replace`` bestehende überschreiben."""
         with csv_path.open(encoding="utf-8", newline="") as f:
-            rows = [{k: (None if v == "" else v) for k, v in z.items()} for z in csv.DictReader(f)
-                      if only_rule_set is None or z["ruleset_name"] == only_rule_set]
+            rows = [{k: (None if v == "" else v) for k, v in z.items()} for z in csv.DictReader(f)]
+        self._insert(table, rows, replace)
+
+    def _insert(self, table: str, rows: list[dict], replace: bool = False) -> None:
         if rows:
             # Nur _CSV_ONLY wird übergangen: jede andere fehlende Spalte soll beim Start laut scheitern (_add_columns vergessen?)
             columns = [s for s in rows[0] if s not in _CSV_ONLY]
@@ -158,7 +162,7 @@ class Database:
         """Regeln eines Massstabs auf den Standard (Seed) zurücksetzen; eigene Regeln gehen verloren."""
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM rule WHERE ruleset_name = ?", (ruleset_name,))
-            self._seed("rule", _HERE / "seed" / "regeln.csv", only_rule_set=ruleset_name)
+            self._insert("rule", seed_rules(ruleset_name))
 
     def rules(self, ruleset_name: str) -> list[dict]:
         """[{ifc_class_name, action, category}] eines Regelsets."""
