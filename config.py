@@ -123,6 +123,9 @@ HOST_MIN_HEIGHT_RATIO = 0.5
 # Öffnungen werden nur ausgeschnitten oder vertieft, wenn sie mindestens so viele Mindestwände breit und hoch
 # sind – schmalere Schlitze liessen sich nicht sauber drucken und bleiben geschlossen.
 OPENING_MIN_WALLS = 2.0
+# Vertiefte Öffnungen: Laibung je Seite mindestens so tief (Modell-mm), sonst bleibt die Öffnung voll. 1.2-mm-Wand
+# − 2 × 0.2 = Kern 0.8 mm (zwei Extrusionslinien). Die grösste Tiefe ist der Massstab-Parameter reveal_depth_mm.
+REVEAL_MIN_DEPTH_MM = 0.2
 
 # --- Geländer als Band (core/voxels/band.py) ------------------------------------------------------
 RAILING_GAP_VOXELS = 2          # so grosse Lücken zwischen Gebäude und Geländerunterkante werden geschlossen

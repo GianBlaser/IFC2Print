@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from core.openings.detection import axis_system, find_hosts, Opening, opening
-from core.openings.windows import apply, box_mesh, check_mode, fill_box, OPENING_MODES, reveal_plan
+from core.openings.windows import apply, box_mesh, check_mode, fill_box, OPENING_MODES, reveal_depth
+from core.voxels.meshing import marching_cubes
 from core.packages.scaling import Scaling
 from core.voxels.grid import VoxelGrid
 
@@ -36,9 +37,9 @@ def _opening(kind="windows", thickness=(1.5 + 1e-3, 7.5 - 1e-3), voxel=6, u=(5.6
     return Opening(kind, axis_system(np.array([1.0, 0, 0])), thickness, voxel, spans, spans)
 
 
-def _apply(matrix, o, mode, reveal_mm=1.0, min_wall_mm=2.0, model_center=(0.0, 10.0, 10.0), core_mm=2.0):
+def _apply(matrix, o, mode, reveal_mm=1.0, min_wall_mm=2.0, core_mm=2.0):
     voxel_grid = VoxelGrid(matrix, np.zeros(3), 1.0)
-    n = apply(voxel_grid, [o], {o.kind: mode}, min_wall_mm, reveal_mm, np.array(model_center), core_mm)
+    n = apply(voxel_grid, [o], {o.kind: mode}, min_wall_mm, reveal_mm, core_mm)
     return voxel_grid.matrix, n
 
 
@@ -163,31 +164,28 @@ def test_box_in_rotated_system():
     assert np.isclose(k.bounds[0][1], 10) and np.isclose(k.bounds[1][1], 12)    # Dicke entlang n = y
 
 
-# --- Laibungsseiten ---------------------------------------------------------------
+# --- Laibungstiefe ---------------------------------------------------------------
 
-def test_reveal_plan_both_sides_if_core_remains():
-    assert reveal_plan(_opening(voxel=6), 1, 2, outside=1) == ([1, -1], 1)
-    assert reveal_plan(_opening(voxel=4), 1, 2, outside=1) == ([1, -1], 1)      # Kern genau Mindestkern
+@pytest.mark.parametrize("voxel, expected", [
+    (3, 0.2),        # 1.2-mm-Wand: je 0.2 mm, Kern 0.8 mm
+    (4, 0.35),       # 1.6 mm: (1.6 − 0.8) / 2 = 0.4 → höchstens 0.35
+    (5, 0.35),
+    (2, 0.0),        # 0.8 mm: keine Laibung, die Öffnung bleibt voll
+])
+def test_reveal_depth_both_sides_between_min_and_max(voxel, expected):
+    assert reveal_depth(_opening(voxel=voxel), 0.4, 0.35, 0.8) == pytest.approx(expected)
 
 
-def test_reveal_plan_only_outside_or_not_at_all():
-    assert reveal_plan(_opening(voxel=3), 1, 2, outside=1) == ([1], 1)
-    assert reveal_plan(_opening(voxel=3), 1, 2, outside=-1) == ([-1], 1)
-    assert reveal_plan(_opening(voxel=2), 1, 2, outside=1) == ([], 0)
-
-
-def test_reveal_plan_outside_before_shallower():
-    """Volle Tiefe nur aussen geht vor beidseitig flacher; reicht auch das nicht, wird die Laibung flacher."""
-    assert reveal_plan(_opening(voxel=5), 2, 2, outside=1) == ([1], 2)
-    assert reveal_plan(_opening(voxel=3), 2, 2, outside=1) == ([1], 1)
-    assert reveal_plan(_opening(voxel=4), 4, 2, outside=-1) == ([-1], 2)
+def test_reveal_depth_below_minimum_stays_full():
+    """1.4 mm Kern in 1.6-mm-Wand liesse je 0.1 mm – unter REVEAL_MIN_DEPTH_MM."""
+    assert reveal_depth(_opening(voxel=4), 0.4, 0.35, 1.4) == 0.0
 
 
 def test_core_never_thinner_than_min_wall():
     """Der Kern hält auch die Mindestwand des Profils ein, wenn der Mindestkern kleiner ist: 6 Voxel, Tiefe 2,
-    Mindestwand 3 → beidseitig bliebe 2, nur aussen 4."""
+    Mindestwand 3 → je 1.5 Voxel Laibung, Kern 3."""
     matrix, _ = _apply(_wall(), _opening(), "vertieft", reveal_mm=2.0, min_wall_mm=3.0, core_mm=1.0)
-    assert matrix[2:6, 6:14, 6:14].all() and not matrix[6:8, 6:14, 6:14].any()
+    assert matrix[3:7, 6:14, 6:14].all() and not matrix[[2, 7], 6:14, 6:14].any()
 
 
 # --- Anwenden ---------------------------------------------------------------------
@@ -202,10 +200,10 @@ def test_closed_fills_the_hole_over_the_whole_thickness():
 def test_unknown_variant_is_closed_and_mode_is_checked():
     o = _opening(kind="sonst")
     voxel_grid = VoxelGrid(_wall(), np.zeros(3), 1.0)
-    assert apply(voxel_grid, [o], {}, 2.0, 1.0, np.zeros(3)) == 1
+    assert apply(voxel_grid, [o], {}, 2.0, 1.0) == 1
     assert np.array_equal(voxel_grid.matrix, _wall(with_hole=False))
     with pytest.raises(ValueError):
-        apply(voxel_grid, [o], {"sonst": "halboffen"}, 2.0, 1.0, np.zeros(3))
+        apply(voxel_grid, [o], {"sonst": "halboffen"}, 2.0, 1.0)
 
 
 def test_recessed_leaves_one_voxel_layer_empty_on_both_sides():
@@ -218,27 +216,36 @@ def test_recessed_leaves_one_voxel_layer_empty_on_both_sides():
     assert n == 1
 
 
-def test_recessed_thin_wall_only_outside():
-    o = _opening(thickness=(1.5 + 1e-3, 4.5 - 1e-3), voxel=3)          # Wand x = 2..4
-    wall = _wall(2, 4)
-    outside_plus, _ = _apply(wall.copy(), o, "vertieft", model_center=(-10.0, 10.0, 10.0))
-    expected = _wall(2, 4, with_hole=False)
-    expected[(4, *_HOLE)] = False
-    assert np.array_equal(outside_plus, expected)
-    outside_minus, _ = _apply(wall.copy(), o, "vertieft", model_center=(20.0, 10.0, 10.0))
-    expected = _wall(2, 4, with_hole=False)
-    expected[(2, *_HOLE)] = False
-    assert np.array_equal(outside_minus, expected)
+@pytest.mark.parametrize("x_to, face_depth", [(4, 0.2), (6, 0.35)])
+def test_recess_finer_than_a_voxel(x_to, face_depth):
+    """Pitch 0.4 mm: Die Laibung liegt im Netz je Seite 0.2 mm (1.2-mm-Wand) bzw. 0.35 mm (2.0 mm) tief,
+    obwohl ein Voxel 0.4 mm misst. Wand x = 2..x_to, Flächen bei 0.6 und (x_to + 0.5) · 0.4."""
+    p, voxel = 0.4, x_to - 1
+    lo, hi = 1.5 * p, (x_to + 0.5) * p
+    span = np.array([(5.5 * p, 13.5 * p), (5.5 * p, 13.5 * p)])
+    o = Opening("windows", axis_system(np.array([1.0, 0, 0])), (lo, hi), voxel, span, span)
+    voxel_grid = VoxelGrid(_wall(2, x_to), np.zeros(3), p)
+    assert apply(voxel_grid, [o], {"windows": "vertieft"}, 0.8, 0.35, 0.8) == 1
+    mesh = marching_cubes(voxel_grid.scalar_field(voxel_grid.matrix, np.zeros(3, dtype=int)), voxel_grid.origin, p)
+    middle = np.all(np.abs(mesh.vertices[:, 1:] - 9.5 * p) < 2 * p, axis=1)       # Mitte der Öffnung
+    x = np.unique(np.round(mesh.vertices[middle, 0], 3))
+    assert x == pytest.approx([lo + face_depth, hi - face_depth], abs=2e-3)
 
 
-def test_recessed_thin_wall_keeps_min_wall_as_core():
-    """3-Voxel-Wand: Ein Kern von 1 Voxel genügt nur, wenn auch die Mindestwand 1 Voxel ist – sonst nur aussen."""
-    o = _opening(thickness=(1.5 + 1e-3, 4.5 - 1e-3), voxel=3)
-    matrix, _ = _apply(_wall(2, 4), o, "vertieft", core_mm=1.0, min_wall_mm=1.0)
-    assert matrix[3, 6:14, 6:14].all()
-    assert not matrix[2, 6:14, 6:14].any() and not matrix[4, 6:14, 6:14].any()
-    matrix, _ = _apply(_wall(2, 4), o, "vertieft", core_mm=1.0, min_wall_mm=2.0)
-    assert matrix[2:4, 6:14, 6:14].all() and not matrix[4, 6:14, 6:14].any()       # nur aussen (+x), Kern 2
+def test_recess_too_thin_wall_stays_full():
+    """2-Voxel-Wand bei Mindestkern 2: keine Laibung, die Öffnung wird nur gefüllt."""
+    o = _opening(thickness=(1.5 + 1e-3, 3.5 - 1e-3), voxel=2)
+    matrix, _ = _apply(_wall(2, 3), o, "vertieft")
+    assert np.array_equal(matrix, _wall(2, 3, with_hole=False))
+
+
+def test_refilled_voxel_ignores_stored_level():
+    """Wird ein Laibungsvoxel später wieder gefüllt, gilt die Bool-Matrix, nicht der gespeicherte Feldwert."""
+    voxel_grid = VoxelGrid(_wall(), np.zeros(3), 1.0)
+    apply(voxel_grid, [_opening()], {"windows": "vertieft"}, 2.0, 1.0, 2.0)
+    voxel_grid.matrix[2, 6:14, 6:14] = True
+    field = voxel_grid.scalar_field(voxel_grid.matrix, np.zeros(3, dtype=int))
+    assert (field[2, 6:14, 6:14] == 1).all() and (field[7, 6:14, 6:14] < 0.5).all()
 
 
 def test_free_opening_only_with_contact():
@@ -248,7 +255,7 @@ def test_free_opening_only_with_contact():
     o = Opening("windows", axis_system(np.array([1.0, 0, 0])), (2.5, 5.5), 3,
                  np.array([(6.6, 12.4), (6.6, 12.4)]), np.array([(6.6, 12.4), (6.6, 12.4)]), free=True)
     voxel_grid = VoxelGrid(empty.copy(), np.zeros(3), 1.0)
-    assert apply(voxel_grid, [o], {"windows": "geschlossen"}, 2.0, 1.0, np.zeros(3)) == 1
+    assert apply(voxel_grid, [o], {"windows": "geschlossen"}, 2.0, 1.0) == 1
     assert voxel_grid.matrix[3:6, 7:13, 7:13].all()
     far = Opening("windows", o.axes, o.thickness, 3, np.array([(6.6, 12.4), (12.6, 17.4)]),
                     np.array([(6.6, 12.4), (12.6, 17.4)]), free=True)    # schwebt über der «Decke»
@@ -279,7 +286,7 @@ def test_too_small_opening_is_only_filled():
 def test_return_value_counts_only_changed_openings():
     voxel_grid = VoxelGrid(_wall(), np.zeros(3), 1.0)
     already_full = _opening(kind="doors", u=(0.6, 3.4), w=(0.6, 3.4))   # liegt im bereits vollen Wandteil
-    n = apply(voxel_grid, [_opening(), already_full], {}, 2.0, 1.0, np.zeros(3))
+    n = apply(voxel_grid, [_opening(), already_full], {}, 2.0, 1.0)
     assert n == 1
 
 

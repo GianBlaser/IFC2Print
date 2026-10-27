@@ -76,7 +76,7 @@ def test_scale_parameters(db):
     assert p500.min_thickness_wall_mm == 0.8 and p500.min_thickness_railing_mm is None
     assert p500.qualities == ("fein",) and not p500.connectors_allowed
     p50 = ScaleParameters.from_row(db.scale_parameters("1:50"))
-    assert p50.reveal_depth_mm == 1.6 and p50.quality_default == "auto"
+    assert p50.reveal_depth_mm == 0.35 and p50.quality_default == "auto"
     assert ScaleParameters.from_row(db.scale_parameters("1:200")) == ScaleParameters.default("1:200")
 
 
@@ -384,14 +384,14 @@ def test_set_scale_parameter_changes_only_that_scale_and_parameter(db):
 
 def test_scale_override_survives_reopen_while_the_standard_is_reseeded(db, file_path):
     """Der Standard (Tabelle scale) kommt bei jedem Start neu aus der CSV, der eigene Wert bleibt."""
-    db.set_scale_parameter("1:200", "reveal_depth_mm", 1.5)
+    db.set_scale_parameter("1:200", "reveal_depth_mm", 0.3)
     with db._lock, db._conn:
         db._conn.execute("UPDATE scale SET reveal_depth_mm = 9.9, min_thickness_wall_mm = 9.9 WHERE ruleset_name = '1:200'")
     db.close()
     db2 = Database(file_path)
     standard = ScaleParameters.default("1:200")
-    assert db2.scale_overrides("1:200") == {"reveal_depth_mm": 1.5}
-    assert db2.scale_parameters("1:200")["reveal_depth_mm"] == 1.5                               # eigener Wert
+    assert db2.scale_overrides("1:200") == {"reveal_depth_mm": 0.3}
+    assert db2.scale_parameters("1:200")["reveal_depth_mm"] == 0.3                               # eigener Wert
     assert db2.scale_parameters("1:200")["min_thickness_wall_mm"] == standard.min_thickness_wall_mm   # Standard neu
     db2.close()
 
@@ -401,11 +401,11 @@ def test_scale_override_survives_reopen_while_the_standard_is_reseeded(db, file_
     ("min_thickness_wall_mm", None), ("min_thickness_wall_mm", float("nan")), ("min_thickness_wall_mm", ""),
     ("denominator", 1.0), ("qualities", 1.0), ("unbekannt_mm", 1.0)])
 def test_set_scale_parameter_with_invalid_value_stores_nothing(db, parameter, value):
-    db.set_scale_parameter("1:200", "reveal_depth_mm", 1.5)                                      # bestehender Wert bleibt
+    db.set_scale_parameter("1:200", "reveal_depth_mm", 0.3)                                      # bestehender Wert bleibt
     before = db.scale_parameters("1:200")
     with pytest.raises(ValueError):
         db.set_scale_parameter("1:200", parameter, value)
-    assert db.scale_overrides("1:200") == {"reveal_depth_mm": 1.5}
+    assert db.scale_overrides("1:200") == {"reveal_depth_mm": 0.3}
     assert db.scale_parameters("1:200") == before
 
 
@@ -413,15 +413,15 @@ def test_reset_scale_parameters_deletes_one_or_all(db):
     standard = db.scale_parameters("1:200")
     for scale in ("1:200", "1:100"):
         db.set_scale_parameter(scale, "min_thickness_wall_mm", 2.0)
-        db.set_scale_parameter(scale, "reveal_depth_mm", 1.5)
+        db.set_scale_parameter(scale, "reveal_depth_mm", 0.3)
     db.reset_scale_parameters("1:200", "min_thickness_wall_mm")                                   # nur dieser Parameter
-    assert db.scale_overrides("1:200") == {"reveal_depth_mm": 1.5}
+    assert db.scale_overrides("1:200") == {"reveal_depth_mm": 0.3}
     assert db.scale_parameters("1:200")["min_thickness_wall_mm"] == standard["min_thickness_wall_mm"]
-    assert db.scale_overrides("1:100") == {"min_thickness_wall_mm": 2.0, "reveal_depth_mm": 1.5}
+    assert db.scale_overrides("1:100") == {"min_thickness_wall_mm": 2.0, "reveal_depth_mm": 0.3}
     db.set_scale_parameter("1:200", "min_thickness_wall_mm", 2.0)
     db.reset_scale_parameters("1:200")                                                            # alle dieses Massstabs
     assert db.scale_overrides("1:200") == {} and db.scale_parameters("1:200") == standard
-    assert db.scale_overrides("1:100") == {"min_thickness_wall_mm": 2.0, "reveal_depth_mm": 1.5}  # andere unberührt
+    assert db.scale_overrides("1:100") == {"min_thickness_wall_mm": 2.0, "reveal_depth_mm": 0.3}  # andere unberührt
     db.reset_scale_parameters("1:200")                                                            # nichts zu löschen: kein Fehler
     db.reset_scale_parameters("1:200", "min_core_reveal_mm")
 

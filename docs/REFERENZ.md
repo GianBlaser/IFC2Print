@@ -30,7 +30,7 @@ Was neben den Klassenregeln vom Massstab abhängt (Modellmass, mm). Defaults = 1
 |---|---|---|---|---|---|
 | `min_thickness_wall_mm` | 0.8 | 1.2 | 1.2 | 1.2 | Wände (senkrechte Pakete); wirksam max(Profil, dieser Wert). 0.8 mm = 2 Extrusionslinien, 1.2 mm = 3. Dickere Wände behalten ihre skalierte Dicke, gerundet auf ganze Voxel ([core/packages/scaling.py](../core/packages/scaling.py)). |
 | `min_thickness_railing_mm` | – | 0.8 | 0.8 | 0.8 | Aktion «band»; None = keine Bänder |
-| `reveal_depth_mm` | 0.4 | 0.4 | 0.8 | 1.6 | Tiefe vertiefter Öffnungen, real rund 8 cm; wird reduziert, wenn der Kern sonst zu dünn wäre |
+| `reveal_depth_mm` | 0.35 | 0.35 | 0.35 | 0.35 | Grösste Laibungstiefe je Seite vertiefter Öffnungen; flacher (bis `REVEAL_MIN_DEPTH_MM`), wenn der Kern sonst zu dünn wäre. Höchstens 0.35 mm: Vom Sturz (Extrusionslinie 0.4 mm) liegen so mindestens 0.05 mm auf, er hängt nicht frei. |
 | `min_core_reveal_mm` | 0.8 | 0.8 | 0.8 | 0.8 | Wandkern, der hinter einer Laibung mindestens stehen bleibt; wirksam max(Profil, dieser Wert). 0.8 mm = 2 Extrusionslinien: Ein Kern aus einer einzigen Linie (0.4 mm) war im Testdruck zu dünn. |
 | `qualities` | fein | fein, entwurf, auto | fein, entwurf, auto | fein, entwurf, auto | wählbare Qualitäten (02 Setup), die übrigen gesperrt |
 | `quality_default` | fein | fein | fein | auto | Qualität nach dem Wechsel, falls die bisherige nicht erlaubt ist |
@@ -39,8 +39,8 @@ Was neben den Klassenregeln vom Massstab abhängt (Modellmass, mm). Defaults = 1
 | `door_default` | geschlossen | vertieft | vertieft | vertieft |  |
 
 - **1:500:** Volumenmodell: Gebäudeform und Geschosse ohne Treppen und Geländer. Fenster und Türen geschlossen, weil eine Wand bloss zwei Voxel dick ist: Eine Laibung liesse keinen Kern von zwei Extrusionslinien stehen. Nur «fein», weil eine Wand mit «entwurf» bloss ein Voxel dick wäre und keine Laibung zuliesse. Keine Steckverbinder: Die Zapfen passen nicht in die dünnen Wände. Auskragungen brauchen Stützmaterial.
-- **1:200:** Standard: Treppen, Geländer als Band, Fenster vertieft – in Wänden von 1.2 mm nur aussen, damit hinter der Laibung ein Kern von 0.8 mm (zwei Extrusionslinien) bleibt.
-- **1:100:** Detail: tiefere Laibungen, der Dachaufbau wird sichtbar.
+- **1:200:** Standard: Treppen, Geländer als Band, Fenster vertieft – in Wänden von 1.2 mm je Seite 0.2 mm, damit hinter der Laibung ein Kern von 0.8 mm (zwei Extrusionslinien) bleibt.
+- **1:100:** Detail: der Dachaufbau wird sichtbar.
 - **1:50:** Ausschnitt: einzelne Geschosse wählen. Qualität «auto», weil das ganze Gebäude mit 0.4-mm-Voxeln schnell zu gross für den Arbeitsspeicher wird.
 
 ## Klassenregeln
@@ -195,6 +195,7 @@ Fenster-/Türfüller ([core/openings/detection.find_hosts](../core/openings/dete
 | `HOST_MIN_WIDTH_RATIO` | `0.2` |  |
 | `HOST_MIN_HEIGHT_RATIO` | `0.5` |  |
 | `OPENING_MIN_WALLS` | `2.0` | Öffnungen werden nur ausgeschnitten oder vertieft, wenn sie mindestens so viele Mindestwände breit und hoch sind – schmalere Schlitze liessen sich nicht sauber drucken und bleiben geschlossen. |
+| `REVEAL_MIN_DEPTH_MM` | `0.2` | Vertiefte Öffnungen: Laibung je Seite mindestens so tief (Modell-mm), sonst bleibt die Öffnung voll. 1.2-mm-Wand − 2 × 0.2 = Kern 0.8 mm (zwei Extrusionslinien). Die grösste Tiefe ist der Massstab-Parameter reveal_depth_mm. |
 
 ## Geländer als Band
 

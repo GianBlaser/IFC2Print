@@ -17,7 +17,8 @@ from config import DECIMATION_MAX_VOLUME_CHANGE, DECIMATION_RATIO, SMOOTH_ITERAT
 
 
 def marching_cubes(matrix: np.ndarray, origin: np.ndarray, pitch: float) -> trimesh.Trimesh:
-    """Bool-Matrix → geschlossenes Dreiecksnetz (allseitig gepolstert = immer wasserdicht)."""
+    """Bool-Matrix oder Feld (Fläche bei 0.5, VoxelGrid.scalar_field) → geschlossenes Dreiecksnetz
+    (allseitig gepolstert = immer wasserdicht)."""
     verts, faces, _, _ = measure.marching_cubes(np.pad(matrix, 1).astype(np.float32), level=0.5)
     mesh = trimesh.Trimesh((verts - 1) * pitch + origin, faces, process=False)
     if mesh.volume < 0:   # Marching Cubes liefert konsistente, aber evtl. invertierte Normalen

@@ -30,7 +30,7 @@ TABS = (("klassen", "IFC-Klassen"), ("bauteile", "Bauteile"), ("massstab", "Mass
 PARAMETER_NOTES = {
     "min_thickness_wall_mm": "Dünnere Wände werden als Paket aufgedickt; wirksam mindestens die Mindestwand des Druckers.",
     "min_thickness_railing_mm": "Geländer mit der Regel «Band» werden als Scheibe dieser Dicke gedruckt.",
-    "reveal_depth_mm": "Tiefe vertiefter Fenster und Türen; flacher, wenn sonst der Kern zu dünn würde.",
+    "reveal_depth_mm": "Grösste Laibungstiefe je Seite (0.2–0.35 mm); flacher, wenn sonst der Kern zu dünn würde.",
     "min_core_reveal_mm": "Wand, die hinter einer Laibung mindestens stehen bleibt (0.8 mm = zwei Druckbahnen).",
 }
 

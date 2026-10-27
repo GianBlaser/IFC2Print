@@ -66,7 +66,7 @@ ALL_SCALES = "alle"                         # Spalte «scales» der regeln.csv: 
 EDITABLE_PARAMETERS = {
     "min_thickness_wall_mm": ("Mindestdicke Wände", 0.4, 5.0),
     "min_thickness_railing_mm": ("Dicke Geländer-Band", 0.4, 5.0),
-    "reveal_depth_mm": ("Laibungstiefe", 0.4, 5.0),
+    "reveal_depth_mm": ("Laibungstiefe", 0.2, 0.35),
     "min_core_reveal_mm": ("Kern hinter der Laibung", 0.4, 5.0),
 }
 # Bedingungen eines Schlüssels «Klasse[Bedingung]», in der Reihenfolge ihres Vorrangs → Beschriftung.
@@ -89,7 +89,9 @@ class ScaleParameters:
     # Dickere Wände behalten ihre skalierte Dicke, gerundet auf ganze Voxel (core/packages/scaling.py).
     min_thickness_wall_mm: float = 1.2
     min_thickness_railing_mm: float | None = 0.8   # Aktion «band»; None = keine Bänder
-    reveal_depth_mm: float = 0.4                # Tiefe vertiefter Öffnungen, real rund 8 cm; wird reduziert, wenn der Kern sonst zu dünn wäre
+    # Grösste Laibungstiefe je Seite vertiefter Öffnungen; flacher (bis REVEAL_MIN_DEPTH_MM), wenn der Kern sonst zu dünn
+    # wäre. Höchstens 0.35 mm: Vom Sturz (Extrusionslinie 0.4 mm) liegen so mindestens 0.05 mm auf, er hängt nicht frei.
+    reveal_depth_mm: float = 0.35
     # Wandkern, der hinter einer Laibung mindestens stehen bleibt; wirksam max(Profil, dieser Wert).
     # 0.8 mm = 2 Extrusionslinien: Ein Kern aus einer einzigen Linie (0.4 mm) war im Testdruck zu dünn.
     min_core_reveal_mm: float = 0.8

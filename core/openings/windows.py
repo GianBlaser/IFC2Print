@@ -6,10 +6,12 @@ Wandpakets, in dem sie sitzt (alle Schichten gemeinsam, siehe core/packages/grou
 
   geschlossen     Füllkörper einsetzen → die Wand ist voll, auch wenn das Loch schon in
                   der Wandgeometrie steckt. Kein Sturz-Überhang.
-  vertieft        voll füllen, dann innen und aussen eine flache Laibung ausräumen.
-                  Der Kern dahinter bleibt mindestens so dick wie der Mindestkern und die
-                  Mindestwand des Druckerprofils: sonst nur aussen, dann weniger tief, zuletzt voll
-                  (``reveal_plan``).
+  vertieft        voll füllen, dann innen und aussen gleich tief eine flache Laibung ausräumen:
+                  mindestens REVEAL_MIN_DEPTH_MM, höchstens die Laibungstiefe des Massstabs, und
+                  der Kern dahinter mindestens so dick wie der Mindestkern und die Mindestwand des
+                  Druckerprofils (``reveal_depth``). Reicht die Wand dafür nicht, bleibt sie voll.
+                  Die Tiefe ist feiner als ein Voxel (VoxelGrid.place_level): 1.2-mm-Wand → je
+                  0.2 mm, Kern 0.8 mm; ab 1.5 mm Wand je 0.35 mm.
   ausgeschnitten  Öffnung über die ganze Paketdicke ausschneiden.
 
 Ein Füller kann in mehreren Paketen sitzen (Fenster über Eck: je Schenkel eine
@@ -30,7 +32,7 @@ from collections.abc import Sequence
 import numpy as np
 import trimesh
 
-from config import OPENING_MIN_WALLS
+from config import OPENING_MIN_WALLS, REVEAL_MIN_DEPTH_MM
 from core.analysis.ruleset import ScaleParameters
 from core.openings.detection import Opening
 from core.voxels.grid import VoxelGrid
@@ -63,30 +65,34 @@ def fill_body(o: Opening, margin_mm: float) -> trimesh.Trimesh:
     return box_mesh(o.axes, [o.thickness, *(o.filling + [-margin_mm, margin_mm])])
 
 
-def reveal(o: Opening, side: int, depth_mm: float, pitch_mm: float) -> trimesh.Trimesh:
-    """Flache Vertiefung auf einer Seite (+1 = Richtung Normale), so gross wie die lichte Öffnung."""
-    lo, hi = o.thickness
-    n = (hi - depth_mm, hi + pitch_mm) if side > 0 else (lo - pitch_mm, lo + depth_mm)
-    return box_mesh(o.axes, [n, *o.clear_span])
-
-
 def cutout(o: Opening, pitch_mm: float) -> trimesh.Trimesh:
     lo, hi = o.thickness
     return box_mesh(o.axes, [(lo - pitch_mm, hi + pitch_mm), *o.clear_span])
 
 
-def reveal_plan(o: Opening, depth_voxel: int, core_voxel: int, outside: int) -> tuple[list[int], int]:
-    """Seiten und Tiefe der Laibung [Voxel], so dass der Kern ≥ ``core_voxel`` bleibt.
+def reveal_depth(o: Opening, pitch_mm: float, max_mm: float, core_mm: float) -> float:
+    """Laibungstiefe je Seite [mm]: höchstens ``max_mm``, der Kern bleibt ≥ ``core_mm``.
 
-    Je Tiefe (die volle zuerst, dann je eine Voxelschicht weniger): beidseitig, sonst nur aussen.
-    Reicht der Kern auch bei einem Voxel Tiefe nicht: ([], 0), die Öffnung bleibt voll.
+    Unter REVEAL_MIN_DEPTH_MM: 0, die Öffnung bleibt voll.
     """
-    for depth in range(depth_voxel, 0, -1):
-        if o.voxel - 2 * depth >= core_voxel:
-            return [1, -1], depth
-        if o.voxel - depth >= core_voxel:
-            return [outside], depth
-    return [], 0
+    depth = min(max_mm, (o.voxel * pitch_mm - core_mm) / 2)
+    return depth if depth >= REVEAL_MIN_DEPTH_MM - 1e-9 else 0.0
+
+
+def recess(voxel_grid: VoxelGrid, o: Opening, depth_mm: float) -> int:
+    """Räumt beidseitig eine Laibung von ``depth_mm`` aus, so gross wie die lichte Öffnung.
+
+    Feld über die ganze Wanddicke: 0.5 im Abstand ``depth_mm`` von der näheren Wandfläche, je Pitch
+    tiefer um 1 mehr. Die Wandflächen liegen auf Voxelgrenzen (``o.voxel`` Voxel um die Paketmitte).
+    """
+    p = voxel_grid.pitch
+    middle, half = sum(o.thickness) / 2, o.voxel * p / 2
+
+    def level(centers: np.ndarray) -> np.ndarray:
+        inward = half - np.abs(centers @ o.axes[0] - middle)     # Abstand zur näheren Wandfläche
+        return 0.5 + (inward - depth_mm) / p
+
+    return voxel_grid.place_level(cutout(o, p), level)
 
 
 def fill_box(min_xyz: np.ndarray | Sequence[float], max_xyz: np.ndarray | Sequence[float],
@@ -102,7 +108,7 @@ def fill_box(min_xyz: np.ndarray | Sequence[float], max_xyz: np.ndarray | Sequen
 # --- Anwenden -----------------------------------------------------------------------
 
 def apply(voxel_grid: VoxelGrid, openings: list[Opening], mode_per_variant: dict[str, str],
-             min_wall_mm: float, reveal_mm: float, model_center: np.ndarray,
+             min_wall_mm: float, reveal_mm: float,
              core_mm: float = ScaleParameters.min_core_reveal_mm, mode_per_guid: dict[str, str] | None = None) -> int:
     """Wirkt alle Öffnungen auf das Gitter. Rückgabe: Anzahl Öffnungen, die etwas verändert haben.
 
@@ -110,11 +116,10 @@ def apply(voxel_grid: VoxelGrid, openings: list[Opening], mode_per_variant: dict
 
     Zu kleine Öffnungen (Breite oder Höhe < 2 × Mindestwand) werden nur gefüllt. Freie
     Öffnungen (ohne Wandpaket) nur, wenn ihr Füllkörper das Gebäude berührt. Der Kern hinter
-    einer Laibung ist mindestens ``core_mm`` und die Mindestwand ``min_wall_mm`` dick.
+    einer Laibung ist mindestens ``core_mm`` und die Mindestwand ``min_wall_mm`` dick, die Laibung je Seite
+    höchstens ``reveal_mm`` tief.
     """
     p = voxel_grid.pitch
-    depth_voxel = max(1, round(reveal_mm / p))
-    core_voxel = max(1, int(np.ceil(max(core_mm, min_wall_mm) / p - 1e-9)))
     changed = 0
     for o in openings:
         mode = check_mode((mode_per_guid or {}).get(o.guid) or mode_per_variant.get(o.kind, "geschlossen"))
@@ -125,11 +130,9 @@ def apply(voxel_grid: VoxelGrid, openings: list[Opening], mode_per_variant: dict
             n = voxel_grid.place(cutout(o, p), False)
         else:
             n = voxel_grid.place(fill_body(o, p), True)
-            if mode == "vertieft" and large_enough:
-                outside = 1 if (o.center - model_center) @ o.axes[0] >= 0 else -1
-                sides, depth = reveal_plan(o, depth_voxel, core_voxel, outside)
-                for side in sides:
-                    n += voxel_grid.place(reveal(o, side, depth * p, p), False)
+            depth = reveal_depth(o, p, reveal_mm, max(core_mm, min_wall_mm))
+            if mode == "vertieft" and large_enough and depth:
+                n += recess(voxel_grid, o, depth)
         changed += n > 0
     return changed
 

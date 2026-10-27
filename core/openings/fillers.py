@@ -69,6 +69,5 @@ def insert_openings(grid: VoxelGrid, openings: list[Opening], mode_per_variant: 
     ``mode_per_variant``: Modus je Öffnungsart («windows», «doors»); ``mode_per_guid`` übersteuert einzelne Füller.
     Die Laibung kommt aus den Massstab-Parametern. Rückgabe: Anzahl Öffnungen, die etwas verändert haben.
     """
-    model_center = grid.origin + np.array(grid.matrix.shape) * grid.pitch / 2
-    return windows.apply(grid, openings, mode_per_variant, min_wall_mm, parameter.reveal_depth_mm, model_center,
+    return windows.apply(grid, openings, mode_per_variant, min_wall_mm, parameter.reveal_depth_mm,
                          core_mm=parameter.min_core_reveal_mm, mode_per_guid=mode_per_guid)

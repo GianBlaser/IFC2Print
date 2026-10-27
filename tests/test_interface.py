@@ -285,7 +285,7 @@ async def test_scale_parameter_set_and_reset(user: User):
     """Tab «Massstab»: eigener Wert für die Laibungstiefe → «↺» erscheint; «Auf Standard zurücksetzen» entfernt ihn."""
     await user.open("/")
     await user.should_see(marker="geschoss-00_groundfloor", retries=50)
-    user.find(marker="parameter-reveal_depth_mm").clear().type("0.8")
+    user.find(marker="parameter-reveal_depth_mm").clear().type("0.3")
     await user.should_see(marker="parameter-zurueck-reveal_depth_mm", retries=50)
     user.find(marker="parameter-zuruecksetzen").click()
     await user.should_not_see(marker="parameter-zurueck-reveal_depth_mm", retries=50)

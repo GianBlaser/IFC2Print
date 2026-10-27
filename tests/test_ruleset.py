@@ -707,7 +707,8 @@ def test_check_scale_parameter_accepts_bounds_and_numeric_strings(name):
     assert check_scale_parameter(name, low) == low and check_scale_parameter(name, high) == high      # Grenzen inklusive
     assert check_scale_parameter(name, (low + high) / 2) == (low + high) / 2
     assert check_scale_parameter(name, f"{low}") == low and check_scale_parameter(name, f" {high} ") == high
-    assert check_scale_parameter(name, 2) == 2.0 and isinstance(check_scale_parameter(name, 2), float)
+    if low <= 2 <= high:                                                 # Laibungstiefe: keine ganze Zahl im Bereich
+        assert check_scale_parameter(name, 2) == 2.0 and isinstance(check_scale_parameter(name, 2), float)
 
 
 @pytest.mark.parametrize("name", list(EDITABLE_PARAMETERS))

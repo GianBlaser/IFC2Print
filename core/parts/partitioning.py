@@ -140,7 +140,7 @@ def mesh_pieces(voxel_grid: VoxelGrid, partition: Partition,
             partition.warnings.append(f"«{name}»: grosse geschlossene Hohlräume bleiben ({len(kept)}, {sum(kept) * mm3:.0f} mm³) "
                                       "– im Slicer das Teil nicht in Objekte trennen.")
         lo = np.array([s.start for s in span_slices])
-        mesh = postprocessed(marching_cubes(mask, voxel_grid.origin + lo * voxel_grid.pitch, voxel_grid.pitch), specks=False)
+        mesh = postprocessed(marching_cubes(voxel_grid.scalar_field(mask, lo), voxel_grid.origin + lo * voxel_grid.pitch, voxel_grid.pitch), specks=False)
         result.append((lo[2], partition.names[value], mesh, value))
         if progress:
             progress(partition.names[value], number, len(values))

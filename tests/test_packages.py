@@ -157,20 +157,19 @@ def test_wall_thickness_per_scale(scale, real_m, expected_mm):
 
 
 @pytest.mark.parametrize("scale, wall_voxel, expected", [
-    ("1:500", 2, ([], 0)),               # 0.8-mm-Wand: keine Laibung, die Öffnung bleibt voll
-    ("1:200", 3, ([-1], 1)),             # 1.2-mm-Wand: 0.4 mm nur aussen, Kern 0.8 mm
-    ("1:200", 5, ([1, -1], 1)),          # 2.0-mm-Wand (mit Bekleidung): beidseitig, Kern 1.2 mm
-    ("1:100", 3, ([-1], 1)),             # 0.8 mm Tiefe hätte keinen Kern gelassen → flacher
-    ("1:100", 5, ([-1], 2)),
-    ("1:50", 6, ([-1], 4)),
+    ("1:500", 2, 0.0),                   # 0.8-mm-Wand: keine Laibung, die Öffnung bleibt voll
+    ("1:200", 3, 0.2),                   # 1.2-mm-Wand: je Seite 0.2 mm, Kern 0.8 mm
+    ("1:200", 5, 0.35),                  # 2.0-mm-Wand (mit Bekleidung): je 0.35 mm, Kern 1.3 mm
+    ("1:100", 3, 0.2),
+    ("1:100", 4, 0.35),
+    ("1:50", 6, 0.35),
 ])
 def test_reveal_keeps_two_extrusion_lines(scale, wall_voxel, expected):
-    """«fein» (0.4 mm): Hinter jeder Laibung bleiben mindestens zwei Extrusionslinien (0.8 mm) stehen."""
+    """«fein» (0.4 mm): Laibung beidseitig 0.2–0.35 mm, dahinter mindestens zwei Extrusionslinien (0.8 mm)."""
     from types import SimpleNamespace
-    from core.openings.windows import reveal_plan
+    from core.openings.windows import reveal_depth
     from core.analysis.ruleset import ScaleParameters
     param, pitch = ScaleParameters.default(scale), 0.4
-    depth, core = round(param.reveal_depth_mm / pitch), int(np.ceil(param.min_core_reveal_mm / pitch - 1e-9))
-    sides, depth = reveal_plan(SimpleNamespace(voxel=wall_voxel), depth, core, outside=-1)
-    assert (sides, depth) == expected
-    assert wall_voxel - len(sides) * depth >= 2
+    depth = reveal_depth(SimpleNamespace(voxel=wall_voxel), pitch, param.reveal_depth_mm, param.min_core_reveal_mm)
+    assert depth == pytest.approx(expected)
+    assert wall_voxel * pitch - 2 * depth >= 0.8 - 1e-9
