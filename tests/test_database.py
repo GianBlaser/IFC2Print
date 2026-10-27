@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from core.analysis.ruleset import ScaleParameters, seed_rules
+from core.analysis.ruleset import Ruleset, ScaleParameters, seed_rules
 from db.database import Database
 
 
@@ -69,7 +69,7 @@ def test_railing_band_and_new_classes(db):
 
 
 def test_scale_parameters(db):
-    from core.analysis.ruleset import ScaleParameters, seed_rules
+    from core.analysis.ruleset import ScaleParameters
     p500 = ScaleParameters.from_row(db.scale_parameters("1:500"))
     assert p500.min_thickness_wall_mm == 0.8 and p500.min_thickness_railing_mm is None
     assert p500.qualities == ("fein",) and not p500.connectors_allowed
@@ -296,3 +296,66 @@ def test_retired_standard_rule_is_removed_unless_changed(file_path):
     assert {r["ifc_class_name"]: r["action"] for r in db.rules("1:100")}["IfcFlowTerminal"] == "behalten"
     assert {r["ifc_class_name"]: r["action"] for r in db.rules("1:200")}["IfcDistributionElement"] == "entfernen"
     db.close()
+
+
+# --- Bedingungen im Regelschlüssel ---
+
+def test_set_action_with_condition_stores_the_key(db):
+    db.set_action("1:200", "IfcCovering[aussen]", "behalten", "Fassade")
+    rule = next(r for r in db.rules("1:200") if r["ifc_class_name"] == "IfcCovering[aussen]")
+    assert rule == {"ifc_class_name": "IfcCovering[aussen]", "action": "behalten", "category": "Fassade"}
+    assert _actions(db, "1:200")["IfcCovering"] == "entfernen"                       # Regel ohne Bedingung bleibt
+    assert "IfcCovering[aussen]" not in _actions(db, "1:100")                        # andere Massstäbe unberührt
+    ruleset = Ruleset.from_rows(db.rules("1:200"))
+    assert ruleset.rule_source("IfcCovering", element={"is_external": True}) == "IfcCovering[aussen]"
+    assert ruleset.rule_source("IfcCovering", element={"is_external": False}) == "IfcCovering"
+
+
+def test_set_action_with_condition_updates_and_keeps_category(db):
+    db.set_action("1:200", "IfcMember[duenner_als:0.8]", "entfernen", "Verglasung")
+    db.set_action("1:200", "IfcMember[duenner_als:0.8]", "behalten", "Andere")
+    rules = [r for r in db.rules("1:200") if r["ifc_class_name"] == "IfcMember[duenner_als:0.8]"]
+    assert rules == [{"ifc_class_name": "IfcMember[duenner_als:0.8]", "action": "behalten", "category": "Verglasung"}]
+
+
+def test_conditional_rule_survives_reopen(db, file_path):
+    db.set_action("1:200", "IfcWall[tragend]", "verdicken", "Wand")
+    db.close()
+    db2 = Database(file_path)
+    assert _actions(db2, "1:200")["IfcWall[tragend]"] == "verdicken"
+    assert _actions(db2, "1:200")["IfcWall"] == "behalten"
+    db2.close()
+
+
+@pytest.mark.parametrize("key", ["IfcWall[unbekannt]", "IfcMember[duenner_als]", "IfcMember[duenner_als:abc]",
+                                 "IfcMember[duenner_als:0]", "IfcWall[aussen:1]"])
+def test_set_action_with_invalid_condition_stores_nothing(db, key):
+    before = db.rules("1:200")
+    with pytest.raises(ValueError):
+        db.set_action("1:200", key, "behalten", "Wand")
+    assert db.rules("1:200") == before
+
+
+def test_delete_rule_removes_only_that_key(db):
+    db.set_action("1:200", "IfcWall[aussen]", "verdicken", "Wand")
+    db.set_action("1:100", "IfcWall[aussen]", "verdicken", "Wand")
+    before = _actions(db, "1:200")
+    db.delete_rule("1:200", "IfcWall[aussen]")
+    assert _actions(db, "1:200") == {k: a for k, a in before.items() if k != "IfcWall[aussen]"}
+    assert _actions(db, "1:200")["IfcWall"] == "behalten"                            # Regel ohne Bedingung bleibt
+    assert _actions(db, "1:100")["IfcWall[aussen]"] == "verdicken"                   # anderer Massstab bleibt
+
+
+def test_delete_rule_of_plain_key_keeps_conditional_key(db):
+    db.set_action("1:200", "IfcFantasie", "fuellen", "Test")
+    db.set_action("1:200", "IfcFantasie[innen]", "behalten", "Test")
+    db.delete_rule("1:200", "IfcFantasie")
+    rules = _actions(db, "1:200")
+    assert "IfcFantasie" not in rules and rules["IfcFantasie[innen]"] == "behalten"
+
+
+def test_delete_rule_of_unknown_key_changes_nothing(db):
+    before = db.rules("1:200")
+    db.delete_rule("1:200", "IfcWall[aussen]")
+    db.delete_rule("1:333", "IfcWall")
+    assert db.rules("1:200") == before

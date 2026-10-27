@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import SCALES
-from core.analysis.ruleset import check_action, LEGACY_RULE_SETS, seed_rules
+from core.analysis.ruleset import check_action, check_key, LEGACY_RULE_SETS, seed_rules
 
 _HERE = Path(__file__).parent
 DEFAULT_PATH = _HERE / "regeln.db"
@@ -175,13 +175,22 @@ class Database:
                           "ORDER BY ifc_class_name", (ruleset_name,))
 
     def set_action(self, ruleset_name: str, ifc_class_name: str, action: str, category: str = "Sonstiges") -> None:
-        """Setzt die Aktion einer Klasse; legt die Regel bei Bedarf an (Kategorie bleibt erhalten)."""
+        """Setzt die Aktion einer Klasse; legt die Regel bei Bedarf an (Kategorie bleibt erhalten).
+
+        ``ifc_class_name`` ist ein Regelschlüssel, auch mit Bedingung («IfcCovering[aussen]», siehe core.analysis.ruleset).
+        """
         check_action(action)
+        check_key(ifc_class_name)
         with self._lock, self._conn:
             self._conn.execute(
                 "INSERT INTO rule (ruleset_name, ifc_class_name, action, category) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(ruleset_name, ifc_class_name) DO UPDATE SET action = excluded.action",
                 (ruleset_name, ifc_class_name, action, category))
+
+    def delete_rule(self, ruleset_name: str, ifc_class_name: str) -> None:
+        """Löscht eine Regel; danach gilt wieder die allgemeinere (z.B. ohne Bedingung oder die der Oberklasse)."""
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM rule WHERE ruleset_name = ? AND ifc_class_name = ?", (ruleset_name, ifc_class_name))
 
     # --- Stammdaten -----------------------------------------------------------
 

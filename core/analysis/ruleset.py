@@ -24,6 +24,13 @@ ob ein Dach gedruckt wird, soll nicht davon abhängen, wie das Autorentool es ze
 Feiner steuert ein Schlüssel «Ganzes/Teil» (z.B. «IfcRoof/IfcMember»).
 Die Vererbungskette liefert core/ifc/schema.py.
 
+Bedingungen: An jeden Schlüssel kann in eckigen Klammern eine Bedingung aus ``CONDITIONS`` angehängt werden,
+z.B. «IfcCovering[aussen]» oder «IfcMember[duenner_als:0.8]». Sie gilt nur für Bauteile, die sie erfüllen;
+die übrigen fallen auf den Schlüssel ohne Bedingung zurück. Je Stufe der Vererbungskette gilt:
+Klasse.TYP[Bedingung] → Klasse.TYP → Klasse[Bedingung] → Klasse. Treffen mehrere Bedingungen zu, gewinnt die
+erste in ``CONDITIONS`` (bei «duenner_als» der kleinere Grenzwert). Fehlt die Eigenschaft im IFC
+(kein IsExternal), trifft weder «aussen» noch «innen» zu.
+
 Die Standardregeln stehen in db/seed/regeln.csv: eine Zeile gilt für die Massstäbe der Spalte ``scales``
 («alle» oder eine Liste «1:500,1:200»). Gibt es für einen Schlüssel mehrere Zeilen, gewinnt die mit den wenigsten
 Massstäben – so steht der Normalfall einmal da und jeder Massstab nur mit seinen Abweichungen (``seed_rules``).
@@ -37,6 +44,7 @@ Ausgabe: Aktion, Kategorie und wirksamer Regelschlüssel je Bauteil (``Ruleset.c
 """
 
 import csv
+import math
 from dataclasses import dataclass, fields
 from functools import lru_cache
 from pathlib import Path
@@ -53,6 +61,9 @@ DEFAULT_CSV = _SEED / "regeln.csv"
 SCALE_CSV = _SEED / "massstaebe.csv"
 DEFAULT_SCALE = "1:200"
 ALL_SCALES = "alle"                         # Spalte «scales» der regeln.csv: Zeile gilt für jeden Massstab
+# Bedingungen eines Schlüssels «Klasse[Bedingung]», in der Reihenfolge ihres Vorrangs → Beschriftung.
+# aussen/innen: IsExternal, tragend: LoadBearing (Pset_…Common), duenner_als:<mm>: kleinste Dicke am Modell [mm]
+CONDITIONS = {"duenner_als": "dünner als {} mm", "tragend": "tragend", "aussen": "aussen", "innen": "innen"}
 # Regelsets vor der Umstellung auf Massstab-Regelwerke (Okt. 2026)
 LEGACY_RULE_SETS = {"Standard 1:200": "1:200", "Volumen 1:500": "1:500"}
 
@@ -117,6 +128,63 @@ def check_action(action: str) -> str:
     if action not in ACTIONS:
         raise ValueError(f"Unbekannte Aktion «{action}» – erlaubt: {', '.join(ACTIONS)}")
     return action
+
+
+def split_key(key: str) -> tuple[str, str]:
+    """«IfcWall[aussen]» → («IfcWall», «aussen»); ohne Bedingung → («IfcWall», «»)."""
+    if key.endswith("]") and "[" in key:
+        base, condition = key[:-1].split("[", 1)
+        return base, condition
+    return key, ""
+
+
+def rule_class(key: str) -> str:
+    """Klasse, für die ein Schlüssel gilt: «IfcCovering.CLADDING[aussen]» → «IfcCovering» («Ganzes/Teil» bleibt)."""
+    return split_key(key)[0].split(".")[0]
+
+
+def check_key(key: str) -> str:
+    """Gibt den Schlüssel zurück; eine unbekannte oder falsch geschriebene Bedingung ist ein Fehler."""
+    base, condition = split_key(key)
+    if "[" in base or "]" in base or key.endswith("[]"):
+        raise ValueError(f"«{key}»: Bedingung in eckigen Klammern am Ende, z.B. «IfcWall[aussen]»")
+    if not condition:
+        return key
+    name, _, value = condition.partition(":")
+    if name not in CONDITIONS:
+        raise ValueError(f"Unbekannte Bedingung «{condition}» – erlaubt: {', '.join(CONDITIONS)}")
+    if name == "duenner_als":
+        try:
+            ok = 0 < float(value) < math.inf
+        except ValueError:
+            ok = False
+        if not ok:
+            raise ValueError(f"«{condition}»: Grenzwert in mm fehlt, z.B. «duenner_als:0.8»")
+    elif value:
+        raise ValueError(f"Bedingung «{name}» hat keinen Wert")
+    return key
+
+
+def condition_label(condition: str) -> str:
+    """Beschriftung für die Oberfläche: «duenner_als:0.8» → «dünner als 0.8 mm»."""
+    name, _, value = condition.partition(":")
+    return CONDITIONS.get(name, name).format(value)
+
+
+def _condition_order(condition: str) -> tuple[int, float]:
+    name, _, value = condition.partition(":")
+    return list(CONDITIONS).index(name), float(value or 0)
+
+
+def condition_met(condition: str, element: dict) -> bool:
+    """Erfüllt das Bauteil (is_external, load_bearing, thickness_model_mm) die Bedingung?"""
+    name, _, value = condition.partition(":")
+    if name == "duenner_als":
+        thickness = element.get("thickness_model_mm")
+        return thickness is not None and thickness == thickness and thickness < float(value)    # NaN ≠ NaN
+    if name == "tragend":
+        return element.get("load_bearing") is True
+    return element.get("is_external") is (name == "aussen")
 
 
 @lru_cache(maxsize=None)
@@ -189,10 +257,18 @@ class Ruleset:
 
     def __init__(self, rules: dict[str, str], categories: dict[str, str] | None = None,
                  scale: str = DEFAULT_SCALE, parameter: ScaleParameters | None = None):
-        self.rules = {k: check_action(a) for k, a in rules.items()}
+        self.rules = {check_key(k): check_action(a) for k, a in rules.items()}
         self.categories = categories or {}
         self.scale = LEGACY_RULE_SETS.get(scale, scale)
         self.parameter = parameter or ScaleParameters.default(self.scale)
+        # Schlüssel ohne Bedingung → [(Bedingung, Schlüssel)] in der Reihenfolge des Vorrangs
+        self.conditional: dict[str, list[tuple[str, str]]] = {}
+        for key in self.rules:
+            base, condition = split_key(key)
+            if condition:
+                self.conditional.setdefault(base, []).append((condition, key))
+        for variants in self.conditional.values():
+            variants.sort(key=lambda v: _condition_order(v[0]))
 
     @classmethod
     def from_rows(cls, rows: list[dict], scale: str = DEFAULT_SCALE,
@@ -210,35 +286,46 @@ class Ruleset:
             raise ValueError(f"Unbekannter Massstab «{scale}»")
         return cls.from_rows(rows, scale)
 
-    def rule_source(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "") -> str | None:
+    def rule_source(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "",
+                    element: dict | None = None) -> str | None:
         """Regelschlüssel, der für das Bauteil gilt, oder None (keine Regel → entfernen).
 
         Reihenfolge: «Ganzes/Teil» → Regel des Ganzen → Regel des Teils; je über die Vererbungskette.
+        ``element``: Eigenschaften für Bedingungen (is_external, load_bearing, thickness_model_mm), sonst keine.
         """
+        element = element or {}
         part = class_chain(ifc_class, schema)
         if aggregate:
             aggregate_whole = class_chain(aggregate, schema)
             for g in aggregate_whole:
                 for k in part:
-                    if f"{g}/{k}" in self.rules:
-                        return f"{g}/{k}"
-            if (key := self._key(aggregate_whole, "")) is not None:
+                    if (key := self._match(f"{g}/{k}", element)) is not None:
+                        return key
+            if (key := self._key(aggregate_whole, "", element)) is not None:
                 return key
-        return self._key(part, predefined_type)
+        return self._key(part, predefined_type, element)
 
-    def _key(self, chain: tuple[str, ...], predefined_type: str) -> str | None:
+    def _key(self, chain: tuple[str, ...], predefined_type: str, element: dict) -> str | None:
         for k in chain:
-            if predefined_type and f"{k}.{predefined_type}" in self.rules:
-                return f"{k}.{predefined_type}"
-            if k in self.rules:
-                return k
+            for base in ((f"{k}.{predefined_type}",) if predefined_type else ()) + (k,):
+                if (key := self._match(base, element)) is not None:
+                    return key
         return None
 
-    def action(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "") -> str:
-        return self.rules.get(self.rule_source(ifc_class, predefined_type, schema, aggregate), "entfernen")
+    def _match(self, base: str, element: dict) -> str | None:
+        """Der Schlüssel ``base`` mit der ersten erfüllten Bedingung, sonst ``base`` selbst, sonst None."""
+        for condition, key in self.conditional.get(base, ()):
+            if condition_met(condition, element):
+                return key
+        return base if base in self.rules else None
 
-    def category(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "") -> str:
-        return self.categories.get(self.rule_source(ifc_class, predefined_type, schema, aggregate), "Sonstiges")
+    def action(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "",
+               element: dict | None = None) -> str:
+        return self.rules.get(self.rule_source(ifc_class, predefined_type, schema, aggregate, element), "entfernen")
+
+    def category(self, ifc_class: str, predefined_type: str = "", schema: str | None = None, aggregate: str = "",
+                 element: dict | None = None) -> str:
+        return self.categories.get(self.rule_source(ifc_class, predefined_type, schema, aggregate, element), "Sonstiges")
 
     def reason(self, key: str) -> str:
         """Begründung der Regel ``key`` (siehe ``rule_reason``)."""
@@ -248,15 +335,34 @@ class Ruleset:
         """Ergänzt die Bauteiltabelle um action, is_printed, category, rule und reason (gibt eine Kopie zurück).
 
         ``rule``: der wirksame Regelschlüssel («» = keine Regel, entfernt); ``reason``: seine Begründung. Mit ``schema`` gilt
-        die Vererbung; eine Spalte ``aggregate`` (Klasse des Aggregats) aktiviert die Aggregat-Regel.
+        die Vererbung; eine Spalte ``aggregate`` (Klasse des Aggregats) aktiviert die Aggregat-Regel. Bedingungen lesen
+        die Spalten is_external, load_bearing und thickness_min_mm (real, geteilt durch den Massstab), sofern vorhanden.
         """
         df = df.copy()
         empty = pd.Series("", index=df.index)
-        rows = zip(df["ifc_class"], df["predefined_type"] if "predefined_type" in df else empty, df["aggregate"] if "aggregate" in df else empty)
-        rule = [self.rule_source(k, t, schema, g) for k, t, g in rows]
+        rows = zip(df["ifc_class"], df["predefined_type"] if "predefined_type" in df else empty,
+                   df["aggregate"] if "aggregate" in df else empty, self._elements(df))
+        rule = [self.rule_source(k, t, schema, g, e) for k, t, g, e in rows]
         df["action"] = [self.rules.get(r, "entfernen") for r in rule]
         df["category"] = [self.categories.get(r, "Sonstiges") for r in rule]
         df["rule"] = [r or "" for r in rule]
         df["reason"] = df["rule"].map({r: self.reason(r) for r in set(df["rule"])})
         df["is_printed"] = df["action"].isin(PRINTED_ACTIONS)
         return df
+
+    def _elements(self, df: pd.DataFrame) -> list[dict]:
+        """Eigenschaften je Bauteil für die Bedingungen (leer, wenn das Regelwerk keine hat)."""
+        if not self.conditional:
+            return [{}] * len(df)
+        none = [None] * len(df)
+        thickness = (df["thickness_min_mm"] / self.parameter.denominator).tolist() if "thickness_min_mm" in df else none
+        return [{"is_external": _flag(x), "load_bearing": _flag(t), "thickness_model_mm": d}
+                for x, t, d in zip(df["is_external"] if "is_external" in df else none,
+                                   df["load_bearing"] if "load_bearing" in df else none, thickness)]
+
+
+def _flag(value) -> bool | None:
+    """Wahrheitswert aus einer Tabellenzelle: True, False oder None (fehlt, NaN)."""
+    if value is None or pd.isna(value):
+        return None
+    return bool(value)

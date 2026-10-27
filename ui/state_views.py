@@ -11,6 +11,7 @@ import pandas as pd
 
 from config import SCALES
 from core import pipeline
+from core.analysis.ruleset import rule_class
 from core.ifc.model import IfcModel
 from core.output import report
 from core.output.model_info import bed_fit
@@ -50,7 +51,7 @@ def classes_without_rule(df: pd.DataFrame | None, rules: list[dict]) -> list[dic
     """
     if df is None:
         return []
-    own_classes = {r["ifc_class_name"].split(".")[0] for r in rules}
+    own_classes = {rule_class(r["ifc_class_name"]) for r in rules}
     result = []
     for ifc_class, class_group in df[~df["ifc_class"].isin(own_classes)].groupby("ifc_class"):
         without_aggregate = class_group[class_group["aggregate"] == ""] if "aggregate" in class_group else class_group

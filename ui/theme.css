@@ -302,6 +302,19 @@ button { font: inherit; color: inherit; }
 .klasse-name.kursiv { font-style: italic; }
 .regel-name small { font: 400 10.5px var(--mono); color: var(--faint); white-space: nowrap; flex: none; }
 .radio-zelle { display: flex; justify-content: center; }
+/* Regeln mit Bedingung: «+» legt an (sichtbar beim Darüberfahren), «×» löscht; eingerückt unter ihrer Regel */
+.regel-extra { border: none; background: transparent; padding: 0 4px; font: 500 12px/1 var(--mono); color: var(--faint);
+  cursor: pointer; visibility: hidden; flex: none; }
+.regel-zeile:hover .regel-extra, .regel-zeile.bedingt .regel-extra { visibility: visible; }
+.regel-extra:hover { color: var(--primary); }
+.regel-zeile.bedingt .regel-name { padding-left: 22px; }
+.regel-bedingungen { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 6px 10px 22px; }
+.regel-bedingungen .hint { font-size: 12px; }
+.pill-knopf.klein { padding: 5px 9px; font-size: 11px; }
+.bedingung-duenn { display: inline-flex; align-items: center; gap: 4px; }
+.bedingung-zahl { width: 64px; }
+.bedingung-zahl .q-field__control { min-height: 24px; height: 24px; padding: 0 6px; }
+.bedingung-zahl .q-field__native { min-height: 24px; height: 24px; padding: 0; font: 500 11px var(--mono); }
 .radio { width: 22px; height: 22px; border-radius: 99px; border: 1.5px solid var(--border); background: var(--surface); padding: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center; }
 .radio i { width: 8px; height: 8px; border-radius: 99px; }

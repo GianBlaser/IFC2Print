@@ -8,6 +8,7 @@ Ausgabe: Liste von Prüfpunkten (Dictionaries) bzw. Liste von Sätzen.
 
 import pandas as pd
 
+from core.analysis.ruleset import rule_class
 from core.ifc.assignment import room_names
 from core.ifc.model import IfcModel
 from core.ifc.schema import class_chain
@@ -82,9 +83,9 @@ def _rule_source(z: tuple, schema_id: str) -> str:
     """Woher die Regel eines Bauteils stammt: keine | own | aggregate (Regel des Ganzen) | geerbt (Oberklasse)."""
     if not z.rule:
         return "keine"
-    if z.rule.split(".")[0] == z.ifc_class:
+    if rule_class(z.rule) == z.ifc_class:
         return "own"
-    return "aggregate" if getattr(z, "aggregate", "") and z.rule.split("/")[0].split(".")[0] in \
+    return "aggregate" if getattr(z, "aggregate", "") and rule_class(z.rule).split("/")[0] in \
         class_chain(z.aggregate, schema_id) else "geerbt"
 
 

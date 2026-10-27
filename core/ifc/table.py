@@ -24,7 +24,8 @@ def element_table(model: ifcopenshell.file, geometry: dict[str, Geometry], defec
     siehe room_names), on_site (direkt im IfcSite statt in einem Geschoss),
     bbox_x/y/z_mm (achsparallel), center_x/y/z_mm (Mitte dieser Box, nach dem Versatz), thickness_min_mm
     (kleinste Kante der *orientierten* Box – stimmt auch für schräge Wände), layer_thickness_mm
-    (Materialschichtpaket, falls vorhanden), mesh_defective (nicht endliche Koordinaten).
+    (Materialschichtpaket, falls vorhanden), mesh_defective (nicht endliche Koordinaten), is_external und
+    load_bearing (IsExternal und LoadBearing aus Pset_…Common, auch vom Typ geerbt; None = nicht angegeben).
     Ohne Geometrie: NaN. Nur IfcElement ohne Aussparungen – Annotationen, Raster und das
     Grundstück selbst sind keine Bauteile.
     """
@@ -52,8 +53,20 @@ def element_table(model: ifcopenshell.file, geometry: dict[str, Geometry], defec
             **_size_columns(geometry.get(element.GlobalId)),
             "layer_thickness_mm": layer_thickness.get(element.GlobalId, np.nan),
             "mesh_defective": element.GlobalId in defective,
+            **_common_flags(element),
         })
     return pd.DataFrame(rows)
+
+
+def _common_flags(element) -> dict[str, bool | None]:
+    """IsExternal und LoadBearing aus den Pset_…Common des Bauteils (Werte des Bauteils vor denen des Typs)."""
+    flags = {"is_external": None, "load_bearing": None}
+    for name, values in ifcopenshell.util.element.get_psets(element, psets_only=True).items():
+        if name.startswith("Pset_") and name.endswith("Common"):
+            for column, prop in (("is_external", "IsExternal"), ("load_bearing", "LoadBearing")):
+                if isinstance(values.get(prop), bool):
+                    flags[column] = values[prop]
+    return flags
 
 
 def _size_columns(geo: Geometry | None) -> dict[str, float]:

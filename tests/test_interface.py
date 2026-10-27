@@ -267,6 +267,32 @@ async def test_rule_click_updates_without_error(user: User):
     await asyncio.sleep(3)          # Analyse im Hintergrund; ein Fehler darin lässt den Test beim Abbau scheitern
 
 
+async def test_condition_rule_add_and_delete(user: User):
+    """«+» an IfcSlab → «aussen» legt IfcSlab[aussen] an (eingerückt unter IfcSlab); «×» löscht sie wieder."""
+    await user.open("/")
+    await user.should_see(marker="geschoss-00_groundfloor", retries=50)
+    user.find(marker="bedingung-IfcSlab").click()
+    await user.should_see(marker="bedingung-aussen")
+    user.find(marker="bedingung-aussen").click()
+    await user.should_see(marker="regel-loeschen-IfcSlab[aussen]", retries=50)
+    await user.should_see("IfcSlab · aussen")
+    user.find(marker="regel-loeschen-IfcSlab[aussen]").click()
+    await user.should_not_see(marker="regel-loeschen-IfcSlab[aussen]", retries=50)
+    await asyncio.sleep(1)          # Analyse im Hintergrund fertig laufen lassen
+
+
+def test_condition_rule_acts_on_matching_elements_only(session):
+    """IfcSlab[aussen] → entfernen trifft nur die Decke mit IsExternal = True; die übrigen behalten ihre Regel
+    (die Dachplatten im Testmodell die von IfcRoof)."""
+    session.db.set_action(session.ruleset_name, "IfcSlab[aussen]", "entfernen", "Decke")
+    session.analyse()
+    slabs = session.df[session.df["ifc_class"] == "IfcSlab"]
+    outside = slabs["is_external"] == True                   # noqa: E712 – Spalte mit True/False/None
+    assert outside.sum() == 1
+    assert (slabs.loc[outside, "rule"] == "IfcSlab[aussen]").all() and not slabs.loc[outside, "is_printed"].any()
+    assert set(slabs.loc[~outside, "rule"]) == {"IfcRoof"}                    # die zwei Dachplatten
+
+
 def test_table_templates_match_the_rows(session):
     """Die Vue-Vorlagen der Bauteiltabelle lesen nur Felder, die table_row liefert, und die Slots
     gehören zu bestehenden Spalten (nach Umbenennungen sonst still leer)."""

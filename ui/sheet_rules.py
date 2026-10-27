@@ -2,7 +2,8 @@
 
 Zweck:   Listet die Regeln des Regelsets (= Massstab, gewählt in der Kopfzeile) nach Gruppen (Tragwerk, Erschliessung,
          Ausbau · Öffnungen, Sonstiges) mit einem Radio-Punkt je Aktion, dazu die Klassen des Modells ohne eigene Regel
-         und eine Suche im ganzen IFC-Schema. Ist in der Matrix ein Geschoss gewählt, zeigen beide Tabs nur dessen
+         und eine Suche im ganzen IFC-Schema. «+» an einer Regel legt eine Regel mit Bedingung an (aussen, innen,
+         tragend, dünner als … mm; core/analysis/ruleset.py), «×» löscht sie wieder. Ist in der Matrix ein Geschoss gewählt, zeigen beide Tabs nur dessen
          Bauteile (oranger Filterhinweis). Im selben Blatt sitzt der Tab «Bauteile» (sheet_elements.py); ein Griff
          rechts ausserhalb des Blattes verstellt die Breite des aktiven Tabs.
 Eingabe: die Seite (page) mit Sitzung, Datenbank und Geschoss-Auswahl (page.floor_sel)
@@ -12,13 +13,15 @@ Ausgabe: das Blatt 03 (Element self.sheet); jede Regel wird gespeichert und das 
 import pandas as pd
 from nicegui import events, run, ui
 
-from core.analysis.ruleset import rule_reason
+from core.analysis.ruleset import check_key, condition_label, rule_class, rule_reason, split_key
 from core.ifc.schema import all_classes
 from ui.sheet_elements import SheetElements
 from ui.texts import GROUP_OF, GROUP_ORDER, GROUP_WITHOUT_RULE, HANDLE_JS
 from ui.widgets import button, popup, radio_buttons, remember, saved, set_class, sheet_frame, storey_label, tag
 
 MAX_SCHEMA_ROWS = 40     # Treffer der Schema-Suche, die höchstens als Zeilen erscheinen
+SIMPLE_CONDITIONS = ("aussen", "innen", "tragend")       # ohne Wert; dazu «duenner_als:<mm>» mit Zahlenfeld
+THIN_DEFAULT_MM = 0.8                                     # Vorschlag im Zahlenfeld «dünner als … mm»
 TABS = (("klassen", "IFC-Klassen"), ("bauteile", "Bauteile"))
 
 
@@ -33,7 +36,7 @@ def own_rule_counts(df: pd.DataFrame | None) -> dict[str, int]:
     """Anzahl Bauteile je eigener Regel: Regel «IfcSlab» zählt IfcSlab-Bauteile, geerbte Klassen zählen nicht mit."""
     if df is None or df.empty:
         return {}
-    own = df[df["rule"].str.split(".").str[0] == df["ifc_class"]]
+    own = df[df["rule"].map(rule_class) == df["ifc_class"]]
     return own["rule"].value_counts().to_dict()
 
 
@@ -43,6 +46,7 @@ class SheetRules:
         self.s = page.s
         self.search_text = ""                    # Suchtext im Regelblatt
         self.footer_text = None                  # Fusszeile entsteht erst nach der ersten Liste
+        self.condition_open: str | None = None   # Regel, unter der die Bedingungs-Auswahl offen ist
         self.elements: SheetElements | None = None
         self.tab = saved("tab_03", "klassen") if saved("tab_03", "klassen") in dict(TABS) else "klassen"
         with sheet_frame("Regeln", "sheet-regeln") as self.sheet:
@@ -132,7 +136,7 @@ class SheetRules:
             df = df[df["storey"] == floor]
         counts = own_rule_counts(df)
         groups: dict[str, list] = {g: [] for g in GROUP_ORDER}
-        for rule in self.s.rules:
+        for rule in sorted(self.s.rules, key=lambda r: split_key(r["ifc_class_name"])):   # Bedingungen unter ihrer Regel
             name = rule["ifc_class_name"]
             n = counts.get(name, 0)
             if query in name.lower() and (n or not floor):
@@ -165,13 +169,57 @@ class SheetRules:
 
     def _rule_row(self, rule: dict, n: int) -> None:
         name = rule["ifc_class_name"]
-        with ui.element("div").classes("regel-zeile"):
+        base, condition = split_key(name)
+        with ui.element("div").classes("regel-zeile" + (" bedingt" if condition else "")):
             with ui.element("span").classes("regel-name"):
                 reason = rule_reason(self.s.ruleset_name, name, rule["action"])
-                class_name_label(name, f"{rule['category']} · {reason}" if reason else rule["category"], in_model=n > 0)
+                label = f"{base} · {condition_label(condition)}" if condition else name
+                class_name_label(label, f"{rule['category']} · {reason}" if reason else rule["category"], in_model=n > 0)
                 if n:
                     tag("small", f"{n}×")
+                if condition:
+                    button("regel-extra", lambda: self._delete_rule(name), text="×").props(
+                        'title="Regel mit Bedingung löschen"').mark(f"regel-loeschen-{name}")
+                else:
+                    button("regel-extra", lambda: self._toggle_conditions(name), text="+").props(
+                        'title="Regel mit Bedingung anlegen"').mark(f"bedingung-{name}")
             radio_buttons(name, rule["action"], self.set_rule, rule["category"])
+        if not condition and self.condition_open == name:
+            self._condition_panel(rule)
+
+    def _condition_panel(self, rule: dict) -> None:
+        """Auswahl unter einer Regel: legt «Schlüssel[Bedingung]» mit der Aktion und Kategorie der Regel an."""
+        with ui.element("div").classes("regel-bedingungen"):
+            tag("span", "Nur für Bauteile, die", "hint")
+            for condition in SIMPLE_CONDITIONS:
+                button("pill-knopf klein", lambda c=condition: self._add_condition(rule, c),
+                       text=condition_label(condition)).mark(f"bedingung-{condition}")
+            with ui.element("span").classes("bedingung-duenn"):
+                thin = button("pill-knopf klein", lambda: self._add_condition(rule, f"duenner_als:{limit.value or 0:g}"),
+                              text="dünner als").mark("bedingung-duenner_als")
+                limit = ui.number(value=THIN_DEFAULT_MM, min=0.1, step=0.1, format="%.1f").props(
+                    "dense outlined borderless hide-bottom-space").classes("bedingung-zahl")
+                thin.props('title="Grenzwert am Modell in mm"')
+                tag("span", "mm", "hint")
+
+    def _toggle_conditions(self, name: str) -> None:
+        self.condition_open = None if self.condition_open == name else name
+        self.rule_list.refresh()
+
+    async def _add_condition(self, rule: dict, condition: str) -> None:
+        key = f"{rule['ifc_class_name']}[{condition}]"
+        try:
+            check_key(key)
+        except ValueError as error:
+            self.page.show_message(str(error), "warn")
+            return
+        self.condition_open = None
+        self.page.show_message(f"Regel {key} angelegt – jetzt ihre Aktion wählen.", "ok")
+        await self.set_rule(key, rule["action"], rule["category"])
+
+    async def _delete_rule(self, name: str) -> None:
+        self.s.db.delete_rule(self.s.ruleset_name, name)
+        await self.set_rule(None, None)
 
     def _row_without_rule(self, k: dict, rule_action: str) -> None:
         """Klasse des Modells ohne eigene Regel, mit der Regel, die stattdessen gilt (gestrichelter Punkt).
