@@ -70,8 +70,10 @@ class ScaleParameters:
     # Dickere Wände behalten ihre skalierte Dicke, gerundet auf ganze Voxel (core/packages/scaling.py).
     min_thickness_wall_mm: float = 1.2
     min_thickness_railing_mm: float | None = 0.8   # Aktion «band»; None = keine Bänder
-    reveal_depth_mm: float = 0.4                # Tiefe vertiefter Öffnungen, real rund 8 cm (1:500: ein Voxel)
-    min_core_reveal_mm: float = 0.4             # Wandkern, der hinter einer Laibung stehen bleibt
+    reveal_depth_mm: float = 0.4                # Tiefe vertiefter Öffnungen, real rund 8 cm; wird reduziert, wenn der Kern sonst zu dünn wäre
+    # Wandkern, der hinter einer Laibung mindestens stehen bleibt; wirksam max(Profil, dieser Wert).
+    # 0.8 mm = 2 Extrusionslinien: Ein Kern aus einer einzigen Linie (0.4 mm) war im Testdruck zu dünn.
+    min_core_reveal_mm: float = 0.8
     qualities: tuple[str, ...] = ("fein", "entwurf", "auto")   # wählbare Qualitäten (02 Setup), die übrigen gesperrt
     quality_default: str = "fein"               # Qualität nach dem Wechsel, falls die bisherige nicht erlaubt ist
     connectors_allowed: bool = True             # Steckverbinder zwischen den Geschossteilen möglich

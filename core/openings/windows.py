@@ -7,7 +7,9 @@ Wandpakets, in dem sie sitzt (alle Schichten gemeinsam, siehe core/packages/grou
   geschlossen     Füllkörper einsetzen → die Wand ist voll, auch wenn das Loch schon in
                   der Wandgeometrie steckt. Kein Sturz-Überhang.
   vertieft        voll füllen, dann innen und aussen eine flache Laibung ausräumen.
-                  Bliebe der Kern dünner als die Mindestwand: nur einseitig, sonst voll.
+                  Der Kern dahinter bleibt mindestens so dick wie der Mindestkern und die
+                  Mindestwand des Druckerprofils: sonst nur aussen, dann weniger tief, zuletzt voll
+                  (``reveal_plan``).
   ausgeschnitten  Öffnung über die ganze Paketdicke ausschneiden.
 
 Ein Füller kann in mehreren Paketen sitzen (Fenster über Eck: je Schenkel eine
@@ -73,13 +75,18 @@ def cutout(o: Opening, pitch_mm: float) -> trimesh.Trimesh:
     return box_mesh(o.axes, [(lo - pitch_mm, hi + pitch_mm), *o.clear_span])
 
 
-def reveal_sides(o: Opening, depth_voxel: int, core_voxel: int, outside: int) -> list[int]:
-    """Beidseitig, wenn der Kern ≥ Mindestwand bleibt; sonst nur aussen; sonst gar nicht."""
-    if o.voxel - 2 * depth_voxel >= core_voxel:
-        return [1, -1]
-    if o.voxel - depth_voxel >= core_voxel:
-        return [outside]
-    return []
+def reveal_plan(o: Opening, depth_voxel: int, core_voxel: int, outside: int) -> tuple[list[int], int]:
+    """Seiten und Tiefe der Laibung [Voxel], so dass der Kern ≥ ``core_voxel`` bleibt.
+
+    Je Tiefe (die volle zuerst, dann je eine Voxelschicht weniger): beidseitig, sonst nur aussen.
+    Reicht der Kern auch bei einem Voxel Tiefe nicht: ([], 0), die Öffnung bleibt voll.
+    """
+    for depth in range(depth_voxel, 0, -1):
+        if o.voxel - 2 * depth >= core_voxel:
+            return [1, -1], depth
+        if o.voxel - depth >= core_voxel:
+            return [outside], depth
+    return [], 0
 
 
 def fill_box(min_xyz: np.ndarray | Sequence[float], max_xyz: np.ndarray | Sequence[float],
@@ -102,11 +109,12 @@ def apply(voxel_grid: VoxelGrid, openings: list[Opening], mode_per_variant: dict
     ``mode_per_guid`` übersteuert den Modus einzelner Füller (Ausnahme in der Oberfläche).
 
     Zu kleine Öffnungen (Breite oder Höhe < 2 × Mindestwand) werden nur gefüllt. Freie
-    Öffnungen (ohne Wandpaket) nur, wenn ihr Füllkörper das Gebäude berührt.
+    Öffnungen (ohne Wandpaket) nur, wenn ihr Füllkörper das Gebäude berührt. Der Kern hinter
+    einer Laibung ist mindestens ``core_mm`` und die Mindestwand ``min_wall_mm`` dick.
     """
     p = voxel_grid.pitch
     depth_voxel = max(1, round(reveal_mm / p))
-    core_voxel = max(1, int(np.ceil(core_mm / p - 1e-9)))
+    core_voxel = max(1, int(np.ceil(max(core_mm, min_wall_mm) / p - 1e-9)))
     changed = 0
     for o in openings:
         mode = check_mode((mode_per_guid or {}).get(o.guid) or mode_per_variant.get(o.kind, "geschlossen"))
@@ -119,8 +127,9 @@ def apply(voxel_grid: VoxelGrid, openings: list[Opening], mode_per_variant: dict
             n = voxel_grid.place(fill_body(o, p), True)
             if mode == "vertieft" and large_enough:
                 outside = 1 if (o.center - model_center) @ o.axes[0] >= 0 else -1
-                for side in reveal_sides(o, depth_voxel, core_voxel, outside):
-                    n += voxel_grid.place(reveal(o, side, depth_voxel * p, p), False)
+                sides, depth = reveal_plan(o, depth_voxel, core_voxel, outside)
+                for side in sides:
+                    n += voxel_grid.place(reveal(o, side, depth * p, p), False)
         changed += n > 0
     return changed
 

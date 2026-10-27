@@ -144,7 +144,7 @@ def test_scale_loads_ruleset(session):
     session.apply_setting("windows", "ausgeschnitten")
     session.apply_setting("scale", "1:500")
     assert session.ruleset_name == "1:500"
-    assert (session.quality, session.connectors, session.windows) == ("fein", False, "vertieft")
+    assert (session.quality, session.connectors, session.windows) == ("fein", False, "geschlossen")
     stairs = session.df[session.df["ifc_class"].isin(["IfcStair", "IfcStairFlight"])]
     assert not stairs["is_printed"].any()                                  # 1:500 ohne Treppen
     session.apply_setting("scale", "1:200")

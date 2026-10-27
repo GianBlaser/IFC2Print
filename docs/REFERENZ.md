@@ -30,16 +30,16 @@ Was neben den Klassenregeln vom Massstab abhängt (Modellmass, mm). Defaults = 1
 |---|---|---|---|---|---|
 | `min_thickness_wall_mm` | 0.8 | 1.2 | 1.2 | 1.2 | Wände (senkrechte Pakete); wirksam max(Profil, dieser Wert). 0.8 mm = 2 Extrusionslinien, 1.2 mm = 3. Dickere Wände behalten ihre skalierte Dicke, gerundet auf ganze Voxel ([core/packages/scaling.py](../core/packages/scaling.py)). |
 | `min_thickness_railing_mm` | – | 0.8 | 0.8 | 0.8 | Aktion «band»; None = keine Bänder |
-| `reveal_depth_mm` | 0.4 | 0.4 | 0.8 | 1.6 | Tiefe vertiefter Öffnungen, real rund 8 cm (1:500: ein Voxel) |
-| `min_core_reveal_mm` | 0.4 | 0.4 | 0.4 | 0.4 | Wandkern, der hinter einer Laibung stehen bleibt |
+| `reveal_depth_mm` | 0.4 | 0.4 | 0.8 | 1.6 | Tiefe vertiefter Öffnungen, real rund 8 cm; wird reduziert, wenn der Kern sonst zu dünn wäre |
+| `min_core_reveal_mm` | 0.8 | 0.8 | 0.8 | 0.8 | Wandkern, der hinter einer Laibung mindestens stehen bleibt; wirksam max(Profil, dieser Wert). 0.8 mm = 2 Extrusionslinien: Ein Kern aus einer einzigen Linie (0.4 mm) war im Testdruck zu dünn. |
 | `qualities` | fein | fein, entwurf, auto | fein, entwurf, auto | fein, entwurf, auto | wählbare Qualitäten (02 Setup), die übrigen gesperrt |
 | `quality_default` | fein | fein | fein | auto | Qualität nach dem Wechsel, falls die bisherige nicht erlaubt ist |
 | `connectors_allowed` | nein | ja | ja | ja | Steckverbinder zwischen den Geschossteilen möglich |
-| `window_default` | vertieft | vertieft | vertieft | vertieft | Öffnungsmodus nach dem Wechsel: geschlossen, vertieft, ausgeschnitten |
-| `door_default` | vertieft | vertieft | vertieft | vertieft |  |
+| `window_default` | geschlossen | vertieft | vertieft | vertieft | Öffnungsmodus nach dem Wechsel: geschlossen, vertieft, ausgeschnitten |
+| `door_default` | geschlossen | vertieft | vertieft | vertieft |  |
 
-- **1:500:** Volumenmodell: Gebäudeform und Geschosse ohne Treppen und Geländer. Fenster nur aussen vertieft, weil eine Wand bloss zwei Voxel dick ist. Nur «fein», weil eine Wand mit «entwurf» bloss ein Voxel dick wäre und keine Laibung zuliesse. Keine Steckverbinder: Die Zapfen passen nicht in die dünnen Wände. Auskragungen brauchen Stützmaterial.
-- **1:200:** Standard: Treppen, Geländer als Band, Fenster vertieft.
+- **1:500:** Volumenmodell: Gebäudeform und Geschosse ohne Treppen und Geländer. Fenster und Türen geschlossen, weil eine Wand bloss zwei Voxel dick ist: Eine Laibung liesse keinen Kern von zwei Extrusionslinien stehen. Nur «fein», weil eine Wand mit «entwurf» bloss ein Voxel dick wäre und keine Laibung zuliesse. Keine Steckverbinder: Die Zapfen passen nicht in die dünnen Wände. Auskragungen brauchen Stützmaterial.
+- **1:200:** Standard: Treppen, Geländer als Band, Fenster vertieft – in Wänden von 1.2 mm nur aussen, damit hinter der Laibung ein Kern von 0.8 mm (zwei Extrusionslinien) bleibt.
 - **1:100:** Detail: tiefere Laibungen, der Dachaufbau wird sichtbar.
 - **1:50:** Ausschnitt: einzelne Geschosse wählen. Qualität «auto», weil das ganze Gebäude mit 0.4-mm-Voxeln schnell zu gross für den Arbeitsspeicher wird.
 

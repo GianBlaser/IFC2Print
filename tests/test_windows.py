@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from core.openings.detection import axis_system, find_hosts, Opening, opening
-from core.openings.windows import apply, box_mesh, check_mode, fill_box, OPENING_MODES, reveal_sides
+from core.openings.windows import apply, box_mesh, check_mode, fill_box, OPENING_MODES, reveal_plan
 from core.packages.scaling import Scaling
 from core.voxels.grid import VoxelGrid
 
@@ -165,15 +165,29 @@ def test_box_in_rotated_system():
 
 # --- Laibungsseiten ---------------------------------------------------------------
 
-def test_reveal_sides_both_sides_if_core_remains():
-    assert reveal_sides(_opening(voxel=6), 1, 2, outside=1) == [1, -1]
-    assert reveal_sides(_opening(voxel=4), 1, 2, outside=1) == [1, -1]      # Kern genau Mindestwand
+def test_reveal_plan_both_sides_if_core_remains():
+    assert reveal_plan(_opening(voxel=6), 1, 2, outside=1) == ([1, -1], 1)
+    assert reveal_plan(_opening(voxel=4), 1, 2, outside=1) == ([1, -1], 1)      # Kern genau Mindestkern
 
 
-def test_reveal_sides_only_outside_or_not_at_all():
-    assert reveal_sides(_opening(voxel=3), 1, 2, outside=1) == [1]
-    assert reveal_sides(_opening(voxel=3), 1, 2, outside=-1) == [-1]
-    assert reveal_sides(_opening(voxel=2), 1, 2, outside=1) == []
+def test_reveal_plan_only_outside_or_not_at_all():
+    assert reveal_plan(_opening(voxel=3), 1, 2, outside=1) == ([1], 1)
+    assert reveal_plan(_opening(voxel=3), 1, 2, outside=-1) == ([-1], 1)
+    assert reveal_plan(_opening(voxel=2), 1, 2, outside=1) == ([], 0)
+
+
+def test_reveal_plan_outside_before_shallower():
+    """Volle Tiefe nur aussen geht vor beidseitig flacher; reicht auch das nicht, wird die Laibung flacher."""
+    assert reveal_plan(_opening(voxel=5), 2, 2, outside=1) == ([1], 2)
+    assert reveal_plan(_opening(voxel=3), 2, 2, outside=1) == ([1], 1)
+    assert reveal_plan(_opening(voxel=4), 4, 2, outside=-1) == ([-1], 2)
+
+
+def test_core_never_thinner_than_min_wall():
+    """Der Kern hält auch die Mindestwand des Profils ein, wenn der Mindestkern kleiner ist: 6 Voxel, Tiefe 2,
+    Mindestwand 3 → beidseitig bliebe 2, nur aussen 4."""
+    matrix, _ = _apply(_wall(), _opening(), "vertieft", reveal_mm=2.0, min_wall_mm=3.0, core_mm=1.0)
+    assert matrix[2:6, 6:14, 6:14].all() and not matrix[6:8, 6:14, 6:14].any()
 
 
 # --- Anwenden ---------------------------------------------------------------------
@@ -217,12 +231,14 @@ def test_recessed_thin_wall_only_outside():
     assert np.array_equal(outside_minus, expected)
 
 
-def test_recessed_thin_wall_both_sides_with_thin_core():
-    """Standard: Kern 1 Voxel genügt → auch eine 3-Voxel-Innenwand wird beidseitig vertieft."""
+def test_recessed_thin_wall_keeps_min_wall_as_core():
+    """3-Voxel-Wand: Ein Kern von 1 Voxel genügt nur, wenn auch die Mindestwand 1 Voxel ist – sonst nur aussen."""
     o = _opening(thickness=(1.5 + 1e-3, 4.5 - 1e-3), voxel=3)
-    matrix, _ = _apply(_wall(2, 4), o, "vertieft", core_mm=1.0)
+    matrix, _ = _apply(_wall(2, 4), o, "vertieft", core_mm=1.0, min_wall_mm=1.0)
     assert matrix[3, 6:14, 6:14].all()
     assert not matrix[2, 6:14, 6:14].any() and not matrix[4, 6:14, 6:14].any()
+    matrix, _ = _apply(_wall(2, 4), o, "vertieft", core_mm=1.0, min_wall_mm=2.0)
+    assert matrix[2:4, 6:14, 6:14].all() and not matrix[4, 6:14, 6:14].any()       # nur aussen (+x), Kern 2
 
 
 def test_free_opening_only_with_contact():

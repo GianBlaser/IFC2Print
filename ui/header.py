@@ -206,7 +206,8 @@ class Header:
 
     def _openings(self, field_name: str, reveal_depth_mm: float) -> None:
         notes = {"geschlossen": "Öffnung über die ganze Wanddicke geschlossen (kein Sturz-Überhang).",
-                 "vertieft": f"Voll, innen und aussen {reveal_depth_mm:.1f} mm Laibung (in dünnen Wänden nur aussen).",
+                 "vertieft": f"Voll, innen und aussen {reveal_depth_mm:.1f} mm Laibung (in dünnen Wänden nur aussen oder "
+                             "flacher; zu dünne Wände bleiben voll).",
                  "ausgeschnitten": "Ganz ausgeschnitten."}
         current = self.value(field_name)
         if not self._choice(field_name, OPENING_CAPTION.get(current, current)):
