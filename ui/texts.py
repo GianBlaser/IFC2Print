@@ -55,7 +55,7 @@ MATRIX_SVG = ('<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColo
 GROUP_OF = {"Wand": "TRAGWERK", "Decke": "TRAGWERK", "Dach": "TRAGWERK", "Stütze": "TRAGWERK", "Träger": "TRAGWERK",
             "Fundament": "TRAGWERK", "Treppe": "ERSCHLIESSUNG", "Geländer": "ERSCHLIESSUNG",
             "Verglasung": "AUSBAU · ÖFFNUNGEN", "Öffnung": "AUSBAU · ÖFFNUNGEN", "Ausbau": "AUSBAU · ÖFFNUNGEN",
-            "Fassade": "AUSBAU · ÖFFNUNGEN"}   # alles andere: "SONSTIGES"
+            "Fassade": "AUSBAU · ÖFFNUNGEN", "Lift": "ERSCHLIESSUNG"}   # alles andere: "SONSTIGES"
 GROUP_ORDER = ("TRAGWERK", "ERSCHLIESSUNG", "AUSBAU · ÖFFNUNGEN", "SONSTIGES")
 GROUP_WITHOUT_RULE = "OHNE EIGENE REGEL"
 

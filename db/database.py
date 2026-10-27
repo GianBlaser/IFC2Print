@@ -26,6 +26,9 @@ DEFAULT_PATH = _HERE / "regeln.db"
 # Die Regeln kommen nicht direkt aus regeln.csv, sondern je Massstab aufgelöst (ruleset.seed_rules)
 _SEEDS = {"scale": "massstaebe.csv", "printer_profile": "profile.csv", "material": "material.csv"}
 _LOG = logging.getLogger(__name__)
+# Frühere Standardregeln (Schlüssel → Standardaktion), die eine allgemeinere Regel ersetzt hat. Unverändert
+# (= kein Entscheid des Nutzers) werden sie gelöscht, damit sie nicht als «Eigene Regel» stehen bleiben.
+_RETIRED_RULES = {"IfcFlowTerminal": "entfernen"}         # Okt. 2026: IfcDistributionElement
 # Seed-Spalten ohne Gegenstück in der Datenbank: die Begründung gehört zum Standard (ruleset.rule_reason)
 _CSV_ONLY = {"reason"}
 # Deutsche Tabellen- und Spaltennamen bis Oktober 2026 → heutige Namen (für _migrate_to_english)
@@ -109,6 +112,8 @@ class Database:
             if renamed and new == "1:200":     # alter Standardwert, kein Benutzerentscheid: neu als Band
                 self._conn.execute("UPDATE rule SET action = 'band' WHERE ruleset_name = '1:200' "
                                    "AND ifc_class_name = 'IfcRailing' AND action = 'entfernen'")
+        for key, action in _RETIRED_RULES.items():
+            self._conn.execute("DELETE FROM rule WHERE ifc_class_name = ? AND action = ?", (key, action))
         placeholders = ", ".join("?" * len(SCALES))
         discarded = self._conn.execute(f"SELECT DISTINCT ruleset_name FROM rule WHERE ruleset_name NOT IN ({placeholders})",
                                        tuple(SCALES)).fetchall()

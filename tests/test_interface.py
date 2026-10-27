@@ -134,7 +134,8 @@ def test_notes_of_the_analysis(tmp_path):
     s.load_bytes((Path(__file__).parent.parent / "testdaten" / "MFH_eBKPH_Test.ifc").read_bytes(), "mfh.ifc")
     entries = {p["kind"]: [text for text, _ in p["entries"]] for p in s.check_points}
     assert "IfcFurniture → IfcFurnishingElement" in entries["geerbt"]
-    assert entries["keine"]                                     # Klassen ohne Regel, nicht gedruckt
+    assert "IfcPipeSegment → IfcDistributionElement" in entries["geerbt"]     # Haustechnik über die Oberklasse
+    assert "keine" not in entries                               # jede Klasse des Modells hat eine Regel
 
 
 def test_scale_loads_ruleset(session):

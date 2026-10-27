@@ -64,6 +64,7 @@ Standard je Massstab; eigene Regeln speichert die Datenbank. – = keine eigene 
 | `IfcStairFlight` | Treppe | entfernen | behalten | behalten | behalten | **1:500:** Im Volumenmodell zu fein: Eine Stufe (17 cm) wäre bei 1:500 dünner als ein Voxel.<br>**1:200, 1:100, 1:50:** Treppenlauf, wie IfcStair. |
 | `IfcRamp` | Treppe | entfernen | behalten | behalten | behalten | **1:500:** Im Volumenmodell zu fein, wie Treppen.<br>**1:200, 1:100, 1:50:** Rampen zeigen die Erschliessung, wie Treppen. |
 | `IfcRampFlight` | Treppe | entfernen | behalten | behalten | behalten | **1:500:** Im Volumenmodell zu fein, wie Treppen.<br>**1:200, 1:100, 1:50:** Rampenlauf, wie IfcRamp. |
+| `IfcTransportElement` | Lift | entfernen | entfernen | entfernen | entfernen | Lifte und Fahrtreppen stehen im Schacht und sind am Modell nicht sichtbar; der Schacht bleibt über seine Wände. |
 | `IfcRailing` | Geländer | entfernen | band | band | band | **1:500:** Im Volumenmodell zu filigran; bei 1:500 gibt es keine Bänder.<br>**1:200, 1:100, 1:50:** Geländerstäbe (2 cm) würden beim Voxelisieren verschwinden. Das Geländer wird deshalb als dünne Scheibe vom Boden bis zur Geländerhöhe gedruckt. |
 | `IfcCurtainWall` | Verglasung | entfernen | entfernen | entfernen | entfernen | Die Vorhangfassade selbst wird nicht gedruckt. Ihre Öffnung schliesst ein Füller nach dem Öffnungsmodus der Fenster (voll, vertieft oder offen). |
 | `IfcPlate` | Verglasung | entfernen | entfernen | entfernen | entfernen | Meist Glas von Vorhangfassaden, zu dünn für den Druck; die Fläche schliesst der Füller der Fassade. Als Teil eines Dachs gilt dessen Regel. |
@@ -73,9 +74,11 @@ Standard je Massstab; eigene Regeln speichert die Datenbank. – = keine eigene 
 | `IfcCovering` | Ausbau | entfernen | entfernen | entfernen | entfernen | Bodenbeläge, Deckenverkleidungen und Dämmungen im Innern sind dünn und am Modell nicht sichtbar. |
 | `IfcCovering.CLADDING` | Fassade | behalten | behalten | behalten | behalten | Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst. |
 | `IfcCovering.ROOFING` | Dach | entfernen | entfernen | behalten | behalten | **1:500, 1:200:** Der Dachaufbau ändert die Dachform bei 1:500 und 1:200 kaum.<br>**1:100, 1:50:** Ab 1:100 trägt der Dachaufbau sichtbar zur Dachdicke bei; er wird mit dem Dach zum Paket zusammengefasst. |
+| `IfcShadingDevice` | Fassade | entfernen | entfernen | entfernen | entfernen | Storen und Lamellen sind dünner als ein Voxel und würden beim Druck zu Splittern. Feste Sonnenschutzelemente bei Bedarf je Bauteil drucken. |
 | `IfcFurnishingElement` | Möblierung | entfernen | entfernen | entfernen | entfernen | Möbel gehören nicht ins Massstabsmodell. |
-| `IfcFlowTerminal` | Haustechnik | entfernen | entfernen | entfernen | entfernen | Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell. |
+| `IfcDistributionElement` | Haustechnik | entfernen | entfernen | entfernen | entfernen | Haustechnik (Leitungen, Geräte, Sanitärapparate, Heizkörper, Leuchten, Solaranlagen) gehört nicht ins Massstabsmodell; die Regel gilt für alle Unterklassen. |
 | `IfcBuildingElementProxy` | Sonstiges | entfernen | entfernen | entfernen | entfernen | Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen. |
+| `IfcGeographicElement` | Umgebung | entfernen | entfernen | entfernen | entfernen | Terrain und Bepflanzung gehören zur Umgebung, nicht zum Gebäudemodell. Bei Bedarf je Bauteil drucken. |
 
 ## Druckerprofil und Druckbarkeit
 

@@ -17,6 +17,7 @@ alle,IfcRamp,behalten,Treppe,"Rampen zeigen die Erschliessung, wie Treppen."
 1:500,IfcRamp,entfernen,Treppe,"Im Volumenmodell zu fein, wie Treppen."
 alle,IfcRampFlight,behalten,Treppe,"Rampenlauf, wie IfcRamp."
 1:500,IfcRampFlight,entfernen,Treppe,"Im Volumenmodell zu fein, wie Treppen."
+alle,IfcTransportElement,entfernen,Lift,Lifte und Fahrtreppen stehen im Schacht und sind am Modell nicht sichtbar; der Schacht bleibt über seine Wände.
 alle,IfcRailing,band,Geländer,Geländerstäbe (2 cm) würden beim Voxelisieren verschwinden. Das Geländer wird deshalb als dünne Scheibe vom Boden bis zur Geländerhöhe gedruckt.
 1:500,IfcRailing,entfernen,Geländer,Im Volumenmodell zu filigran; bei 1:500 gibt es keine Bänder.
 alle,IfcCurtainWall,entfernen,Verglasung,"Die Vorhangfassade selbst wird nicht gedruckt. Ihre Öffnung schliesst ein Füller nach dem Öffnungsmodus der Fenster (voll, vertieft oder offen)."
@@ -28,6 +29,8 @@ alle,IfcCovering,entfernen,Ausbau,"Bodenbeläge, Deckenverkleidungen und Dämmun
 alle,IfcCovering.CLADDING,behalten,Fassade,Die Fassadenbekleidung bildet die Aussenhaut und bestimmt die Gebäudemasse; sie wird mit der Wand zum Paket zusammengefasst.
 alle,IfcCovering.ROOFING,behalten,Dach,Ab 1:100 trägt der Dachaufbau sichtbar zur Dachdicke bei; er wird mit dem Dach zum Paket zusammengefasst.
 "1:500,1:200",IfcCovering.ROOFING,entfernen,Dach,Der Dachaufbau ändert die Dachform bei 1:500 und 1:200 kaum.
+alle,IfcShadingDevice,entfernen,Fassade,Storen und Lamellen sind dünner als ein Voxel und würden beim Druck zu Splittern. Feste Sonnenschutzelemente bei Bedarf je Bauteil drucken.
 alle,IfcFurnishingElement,entfernen,Möblierung,Möbel gehören nicht ins Massstabsmodell.
-alle,IfcFlowTerminal,entfernen,Haustechnik,"Haustechnik (Sanitärapparate, Leuchten) gehört nicht ins Massstabsmodell."
+alle,IfcDistributionElement,entfernen,Haustechnik,"Haustechnik (Leitungen, Geräte, Sanitärapparate, Heizkörper, Leuchten, Solaranlagen) gehört nicht ins Massstabsmodell; die Regel gilt für alle Unterklassen."
 alle,IfcBuildingElementProxy,entfernen,Sonstiges,"Proxies sind unbestimmt, oft Bibliotheksobjekte. Bei Bedarf je Bauteil drucken oder eine eigene Regel anlegen."
+alle,IfcGeographicElement,entfernen,Umgebung,"Terrain und Bepflanzung gehören zur Umgebung, nicht zum Gebäudemodell. Bei Bedarf je Bauteil drucken."

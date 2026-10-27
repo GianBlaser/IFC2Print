@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from core.analysis.ruleset import ScaleParameters
+from core.analysis.ruleset import ScaleParameters, seed_rules
 from db.database import Database
 
 
@@ -27,8 +27,9 @@ def _actions(db, ruleset_name):
 def test_seed_complete(db):
     assert db.rule_sets() == ["1:500", "1:200", "1:100", "1:50"]
     for m in db.rule_sets():
+        assert _actions(db, m) == {z["ifc_class_name"]: z["action"] for z in seed_rules(m)}
         # inkl. IfcFooting (Fundament); ausser 1:50 auch IfcBeam.LINTEL (Storenkasten-Einlage als Quader)
-        assert len(db.rules(m)) == (24 if m == "1:50" else 25)
+        assert "IfcFooting" in _actions(db, m) and ("IfcBeam.LINTEL" in _actions(db, m)) == (m != "1:50")
     assert any(p["name"] == "Prusa MK4" for p in db.profiles())
     assert any(m["name"] == "PLA" for m in db.materials())
 
@@ -68,7 +69,7 @@ def test_railing_band_and_new_classes(db):
 
 
 def test_scale_parameters(db):
-    from core.analysis.ruleset import ScaleParameters
+    from core.analysis.ruleset import ScaleParameters, seed_rules
     p500 = ScaleParameters.from_row(db.scale_parameters("1:500"))
     assert p500.min_thickness_wall_mm == 0.8 and p500.min_thickness_railing_mm is None
     assert p500.qualities == ("fein",) and not p500.connectors_allowed
@@ -281,3 +282,17 @@ def test_seed_skips_only_the_reason_column(db, tmp_path):
     seed.write_text("name,density_g_cm3,price_chf_kg,unbekannt\nTest-PETG,1.27,28.0,x\n", encoding="utf-8")
     with pytest.raises(sqlite3.OperationalError):
         db._seed("material", seed)
+
+
+def test_retired_standard_rule_is_removed_unless_changed(file_path):
+    """IfcFlowTerminal → entfernen war Standard bis Okt. 2026 (heute IfcDistributionElement): unverändert gelöscht,
+    vom Nutzer geändert bleibt sie als eigene Regel."""
+    db = Database(file_path)
+    db.set_action("1:200", "IfcFlowTerminal", "entfernen", "Haustechnik")
+    db.set_action("1:100", "IfcFlowTerminal", "behalten", "Haustechnik")
+    db.close()
+    db = Database(file_path)
+    assert "IfcFlowTerminal" not in {r["ifc_class_name"] for r in db.rules("1:200")}
+    assert {r["ifc_class_name"]: r["action"] for r in db.rules("1:100")}["IfcFlowTerminal"] == "behalten"
+    assert {r["ifc_class_name"]: r["action"] for r in db.rules("1:200")}["IfcDistributionElement"] == "entfernen"
+    db.close()
