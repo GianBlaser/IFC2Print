@@ -1,20 +1,22 @@
 """Geschossweise Aufteilung des Gesamtmodells in druckbare Teile.
 
 Das Gesamtmodell liegt in EINEM Voxelgitter. Jeder Voxel erhält ein Teil-Label
-(Geschoss oder Dach); benachbarte Teile teilen sich dadurch exakt dieselben
+(Geschoss, Dach oder Deckel); benachbarte Teile teilen sich dadurch exakt dieselben
 Flächen – Voraussetzung für stapelbare Geschosse.
 
 Ablauf (``partition_grid``):
-  1. Fuge je Geschossgrenze finden, um bündige Decken erweitern und je Spalte glätten (core/parts/storey_joints.py).
-  2. Dächer (core/parts/roof.py: geneigte Dachbauteile) erhalten ein eigenes Label.
-  3. Tiefer liegende Decken über Räumen (Deckel) werden eigene Teile «Decke <Geschoss>».
-  4. Inseln, Kleinteile und hängende Stücke dem Nachbarteil zuordnen (core/parts/cleanup.py).
-  5. Schmale Einstülpungen in der Unterseite der Geschossteile füllen (storey_joints.flat_undersides) – zuletzt, damit
-     nichts sie wieder aufreisst, und vor den Steckverbindern, deren Taschen erst im Netz entstehen.
+  1. Fuge je Geschossgrenze finden (core/parts/storey_joints.cuts); alles über der Fuge gehört zum Geschoss darüber –
+     das schneidet, was mehrere Geschosse durchläuft (Wände, Stützen, Fassaden, Treppen), je Spalte an der Unterseite
+     der Decke darüber.
+  2. Dächer und waagrechte Platten werden nie zerschnitten: Sie gehen als Ganzes an ein Teil, Dächer und Deckel
+     (Decken über Räumen ohne Auflage) werden eigene Teile (core/parts/ownership.py).
+  3. Fugen eben halten: kleine Absätze unter der Fuge abschneiden, Rücksprünge darüber auffüllen
+     (storey_joints.level_joints).
+  4. Abgetrennte Stücke dem Teil geben, auf dem sie stehen; Kleinteile ans Nachbarteil (core/parts/cleanup.py).
 Danach vernetzt ``mesh_pieces`` jedes Teil einzeln; die Anordnung auf dem Druckbett liegt in
 core/parts/print_layout.py.
 
-Eingabe: Voxelgitter, Geschosshöhen [(Name, Welt-Z)], optional Dach-Labels
+Eingabe: Voxelgitter (mit Bauteil je Voxel), Geschosshöhen [(Name, Welt-Z)], Grundrisse je Geschoss
 Ausgabe: ``Partition`` (Label je Voxel, Teilnamen, Warnungen) bzw. ein wasserdichtes Mesh je Teil
 """
 
@@ -25,12 +27,10 @@ import numpy as np
 import trimesh
 from scipy.ndimage import find_objects
 
-from config import (CAVITY_FILL_RATIO, ROOF_MIN_RATIO, JOINT_OVERHANG_MM, SPECK_MIN_VOLUME_MM3, JOINT_LEVELING_MM,
-                    JOINT_RECESS_DEPTH_MM, JOINT_RECESS_WIDTH_MM, JOINT_SEARCH_WINDOW_BELOW_M, JOINT_WALL_MAX_MM,
-                    JOINT_WIDTH_MM, JOINT_SLAB_MM)
+from config import CAVITY_FILL_RATIO, JOINT_LEVELING_MM, JOINT_SLAB_MAX_MM, SPECK_MIN_VOLUME_MM3
 from core.parts.cleanup import assign_with_message, without_sliver
-from core.parts.storey_joints import (ceiling_lids, cuts, flat_undersides, joint_columns, smooth_joint,
-                                      storey_and_above)
+from core.parts.ownership import assign_whole_elements, horizontal_mask
+from core.parts.storey_joints import cuts, Joint, joint_columns, level_joints, storey_and_above
 from core.voxels.grid import VoxelGrid
 from core.voxels.meshing import marching_cubes, postprocessed
 
@@ -45,71 +45,41 @@ class Partition:
 
 
 def partition_grid(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]], scale: int,
-              floor_plans: dict[str, np.ndarray] | None = None, roof: np.ndarray | None = None,
-              roof_names: list[str] | None = None) -> Partition:
-    """Teilt das Gitter in Geschoss- und Dachteile (glättet dabei die Fugen in ``voxel_grid.matrix``).
-
-    ``roof``: Label-Gitter der Dachbauteile (−1 = kein Dach, sonst Index in ``roof_names``).
-    """
+              floor_plans: dict[str, np.ndarray] | None = None) -> Partition:
+    """Teilt das Gitter in Geschoss-, Dach- und Deckelteile (hält dabei die Fugen in ``voxel_grid.matrix`` eben)."""
     floor_plans = storey_and_above(voxel_grid, storeys, floor_plans)
     ranges, warnings = cuts(voxel_grid, storeys, scale, floor_plans)
-    # Spalten ausserhalb aller Grundrisse (Bauteile ohne Geschoss, Ränder unter dem Dach): dort gilt jede Fuge.
-    # Sonst fielen sie ans unterste Geschoss und gingen als Insel ganz an ein Nachbarteil – auch weit unter dessen Boden.
-    outside = ~floor_plans[storeys[0][0]] if floor_plans and storeys else False
     m = voxel_grid.matrix
-    voxel = 1000.0 / scale / voxel_grid.pitch                       # Voxel je realem Meter
-    leveling = max(1, int(JOINT_LEVELING_MM / 1000 * voxel))
-    plate = max(leveling + 1, int(round(JOINT_SLAB_MM / 1000 * voxel)))
-    width = int(round(JOINT_WIDTH_MM / 1000 * voxel / 2))          # Radius der Öffnung: halbe Mindestbreite
+    voxel_per_m = 1000.0 / scale / voxel_grid.pitch                 # Voxel je realem Meter
+    leveling = max(1, int(JOINT_LEVELING_MM / 1000 * voxel_per_m))
+    # Spalten ausserhalb aller Grundrisse (Bauteile ohne Geschoss, Ränder unter dem Dach): dort gilt jede Fuge.
+    # Sonst fielen sie ans unterste Geschoss – auch weit über dessen Decke.
+    outside = ~floor_plans[storeys[0][0]] if floor_plans and storeys else np.zeros(m.shape[:2], dtype=bool)
     labels = np.zeros(m.shape, dtype=np.int16)
     k_index = np.arange(m.shape[2], dtype=np.int32)
-    joints = []                                                     # (Label, Fuge, Spalten mit Fuge bei k) je Geschoss
+    horizontal = horizontal_mask(voxel_grid)
+    slab_window = max(1, int(round(JOINT_SLAB_MAX_MM / 1000 * voxel_per_m)))
+    joints = []
     for i, (name, k, _) in enumerate(ranges[1:], start=1):
-        height = smooth_joint(m, k, joint_columns(voxel_grid, floor_plans, name) | outside, leveling, plate, width,
-                              flush=True)
-        labels[k_index[None, None, :] >= height[:, :, None]] = i
-        joints.append((i, k, height == k))
-    names = [name for name, _, _ in ranges]
-    combined = max(1, int(m.sum()))
-    if roof is not None and roof_names:
-        for j, name in enumerate(roof_names):
-            mask = (roof == j) & m
-            if mask.sum() >= ROOF_MIN_RATIO * combined:
-                labels[mask] = len(names)
-                names.append(name)
+        columns = joint_columns(voxel_grid, floor_plans, name) | outside
+        # Wände, Stützen, Treppen werden je Spalte an der Unterseite der Decke darüber geschnitten: Wo die Decke dünner
+        # ist als an der Fuge, bleibt der Wandkopf darunter beim Geschoss darunter. Ohne Decke in der Spalte gilt k.
+        cut = np.full(m.shape[:2], k, dtype=np.int32)
+        if horizontal is not None:
+            floor = horizontal[:, :, k:k + slab_window] & m[:, :, k:k + slab_window]
+            has_floor = floor.any(axis=2)
+            cut[has_floor] = k + floor.argmax(axis=2)[has_floor]
+            labels[(k_index[None, None, :] >= k) & columns[:, :, None] & horizontal] = i
+            labels[(k_index[None, None, :] >= cut[:, :, None]) & columns[:, :, None] & ~horizontal] = i
+        else:
+            labels[(k_index[None, None, :] >= k) & columns[:, :, None]] = i
+        joints.append(Joint(i, k, columns))
     labels[~m] = -1
-    _ceiling_parts(labels, ranges, names, voxel, plate, combined)
-    warnings += assign_with_message(labels, names, len(ranges), max(1, int(JOINT_OVERHANG_MM / 1000 * voxel)),
-                                       voxel_grid.pitch)
-    depth = max(1, int(round(JOINT_RECESS_DEPTH_MM / 1000 * voxel)))
-    radius = max(1, int(round(JOINT_RECESS_WIDTH_MM / 1000 * voxel / 2)))     # Radius der Öffnung: halbe Breite
-    for i, (count, filled) in flat_undersides(labels, m, joints, depth, radius).items():
-        warnings.append(f"«{names[i]}»: Unterseite eben – {count} schmale Einstülpungen gefüllt "
-                        f"({filled * voxel_grid.pitch ** 3:.0f} mm³; Storenkasten, Laibungen, Fugen).")
+    names = [name for name, _, _ in ranges]
+    assign_whole_elements(labels, names, voxel_grid, joints, voxel_per_m, leveling, horizontal)
+    level_joints(m, labels, joints, leveling)
+    warnings += assign_with_message(labels, names, len(ranges), voxel_grid.pitch)
     return Partition(labels, names, warnings)
-
-
-def _ceiling_parts(labels: np.ndarray, ranges: list[tuple[str, int, int]], names: list[str], voxel: float,
-                   plate: int, combined: int) -> None:
-    """Deckel als eigene Teile «Decke <Geschoss>» (core/parts/storey_joints.ceiling_lids), ab ROOF_MIN_RATIO wie Dächer.
-
-    Ein Deckel ist eine tiefer liegende Decke (z.B. TG-Dach neben dem Haus), die oben auf dem unteren Teil läge –
-    gedruckt bräuchte sie Stützen in den Räumen darunter, als eigenes Teil liegt sie flach auf dem Bett.
-    """
-    window = int(round(JOINT_SEARCH_WINDOW_BELOW_M * voxel))
-    wall = int(np.ceil(JOINT_WALL_MAX_MM / 1000 * voxel / 2))
-    boxes = find_objects(labels + 1)                    # Index w ↔ Label w (Werte sind um 1 verschoben)
-    for i, (name, _, _) in enumerate(ranges[:-1]):      # nur Geschosse mit einer Fuge darüber
-        if i >= len(boxes) or boxes[i] is None:
-            continue
-        box = boxes[i]
-        part = labels[box] == i
-        for region, cut in ceiling_lids(part, ranges[i + 1][1] - box[2].start, window, plate, wall):
-            lid = part & region[:, :, None]
-            lid[:, :, :cut] = False
-            if lid.sum() >= ROOF_MIN_RATIO * combined:
-                labels[box][lid] = len(names)
-                names.append(f"Decke {name}")
 
 
 def mesh_pieces(voxel_grid: VoxelGrid, partition: Partition,
@@ -118,8 +88,8 @@ def mesh_pieces(voxel_grid: VoxelGrid, partition: Partition,
 
     Geschlossene Hohlräume bis CAVITY_FILL_RATIO des Teilvolumens werden gefüllt (core/parts/cleanup.without_sliver),
     grössere bleiben; beides meldet ``partition.warnings``.
-    Teilnamen sind eindeutig (core.ifc.assignment.room_names); kämen trotzdem zwei gleich vor,
-    erhält das zweite eine Nummer, statt das erste still zu überschreiben.
+    Teilnamen sind eindeutig (core.ifc.assignment.room_names); kommen trotzdem zwei gleich vor (zwei Deckel eines
+    Geschosses), erhält das zweite eine Nummer, statt das erste still zu überschreiben.
     """
     result = []
     boxes = find_objects(partition.labels + 1)       # Box je Label in EINEM Durchgang: Index w ↔ Label w (−1 = leer)

@@ -132,7 +132,7 @@ def _build_grid(run: _Run, prep: PreparedElements,
                     progress=lambda i, n: run.report("Voxelisieren", 0.05 + 0.55 * i / n))
     if prep.railing:
         run.report("Geländer als Bänder", 0.6)
-        warnings += band.place_railing_bands(run.ifc, grid, prep.railing, run.parameter, prep.elevations, prep.zones)
+        warnings += band.place_railing_bands(grid, prep.railing, run.parameter)
     run.report("Fenster und Türen einsetzen", 0.6)
     opening_count = insert_openings(grid, openings, mode_per_variant, prep.mode_per_guid, run.min_wall_mm, run.parameter)
     return grid, opening_count, warnings
@@ -146,7 +146,7 @@ def _split_into_parts(run: _Run, df: pd.DataFrame,
     # des Gitters und ergäben hauchdünne Zusatzteile.
     printed_storeys = set(df.loc[df["is_printed"], "storey"])
     heights = [(name, z) for name, z in storey_heights(run.ifc.model, run.scale) if name in printed_storeys]
-    partition = partitioning.partition_grid(grid, heights, run.scale, grid.floor_plans, grid.roof, grid.roof_names)
+    partition = partitioning.partition_grid(grid, heights, run.scale, grid.floor_plans)
     parts = partitioning.mesh_pieces(
         grid, partition, progress=lambda name, i, n: run.report(f"Vernetzen «{name}»", 0.65 + 0.35 * i / n))
     return parts, partition

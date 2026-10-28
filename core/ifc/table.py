@@ -15,7 +15,8 @@ from core.ifc.geometry import Geometry
 from core.ifc.layers import layer_thickness_per_guid
 
 
-def element_table(model: ifcopenshell.file, geometry: dict[str, Geometry], defective: set[str], schema_id: str) -> pd.DataFrame:
+def element_table(model: ifcopenshell.file, geometry: dict[str, Geometry], defective: set[str], schema_id: str,
+                  thickness: dict[str, float] | None = None) -> pd.DataFrame:
     """Eine Zeile je physischem Bauteil mit Darstellung (einmalig berechnet, nicht verändern).
 
     Spalten: guid, ifc_class, class_family (siehe CLASS_FAMILIES), aggregate (Klasse des Aggregats,
@@ -23,7 +24,8 @@ def element_table(model: ifcopenshell.file, geometry: dict[str, Geometry], defec
     layer (IfcPresentationLayerAssignment, z.B. ArchiCAD-Ebene), storey (eindeutiger Name,
     siehe room_names), on_site (direkt im IfcSite statt in einem Geschoss),
     bbox_x/y/z_mm (achsparallel), center_x/y/z_mm (Mitte dieser Box, nach dem Versatz), thickness_min_mm
-    (kleinste Kante der *orientierten* Box – stimmt auch für schräge Wände), layer_thickness_mm
+    (``thickness`` je GUID, sonst kleinste Kante der *orientierten* Box – stimmt auch für schräge Wände;
+    IfcModel.thickness misst gekrümmte und L-förmige Wände über Volumen und Oberfläche), layer_thickness_mm
     (Materialschichtpaket, falls vorhanden), mesh_defective (nicht endliche Koordinaten), is_external und
     load_bearing (IsExternal und LoadBearing aus Pset_…Common, auch vom Typ geerbt; None = nicht angegeben).
     Ohne Geometrie: NaN. Nur IfcElement ohne Aussparungen – Annotationen, Raster und das
@@ -50,7 +52,7 @@ def element_table(model: ifcopenshell.file, geometry: dict[str, Geometry], defec
             "layer": layer.get(element.GlobalId, ""),
             "storey": names.get(room.id(), "unbekannt") if room is not None else "unbekannt",
             "on_site": room is not None and room.is_a("IfcSite"),
-            **_size_columns(geometry.get(element.GlobalId)),
+            **_size_columns(geometry.get(element.GlobalId), (thickness or {}).get(element.GlobalId)),
             "layer_thickness_mm": layer_thickness.get(element.GlobalId, np.nan),
             "mesh_defective": element.GlobalId in defective,
             **_common_flags(element),
@@ -69,14 +71,14 @@ def _common_flags(element) -> dict[str, bool | None]:
     return flags
 
 
-def _size_columns(geo: Geometry | None) -> dict[str, float]:
-    """Achsparallele Boxgrösse, deren Mitte und kleinste Kante der orientierten Box (NaN ohne Geometrie)."""
+def _size_columns(geo: Geometry | None, thickness: float | None = None) -> dict[str, float]:
+    """Achsparallele Boxgrösse, deren Mitte und Dicke (``thickness``, sonst kleinste Kante der orientierten Box; NaN ohne Geometrie)."""
     bbox = np.ptp(geo.verts, axis=0) if geo is not None else np.full(3, np.nan)
     center = (geo.verts.min(axis=0) + geo.verts.max(axis=0)) / 2 if geo is not None else np.full(3, np.nan)
     return {
         "bbox_x_mm": bbox[0], "bbox_y_mm": bbox[1], "bbox_z_mm": bbox[2],
         "center_x_mm": center[0], "center_y_mm": center[1], "center_z_mm": center[2],
-        "thickness_min_mm": obb_thickness(geo.verts) if geo is not None else np.nan,
+        "thickness_min_mm": np.nan if geo is None else (thickness if thickness is not None else obb_thickness(geo.verts)),
     }
 
 
@@ -94,3 +96,15 @@ def obb_thickness(verts: np.ndarray) -> float:
     except Exception:  # degenerierte Punktwolke (z.B. alles in einer Ebene)
         return axis_parallel
     return min(float(np.min(extents)), axis_parallel)
+
+
+def second_edge(verts: np.ndarray) -> float:
+    """Zweitkleinste Kante der orientierten Box (reale mm); bei degenerierter Punktwolke die der achsparallelen."""
+    axis_parallel = np.sort(np.ptp(verts, axis=0))
+    if len(verts) < 4:
+        return float(axis_parallel[1])
+    try:
+        _, extents = trimesh.bounds.oriented_bounds(verts)
+    except Exception:  # degenerierte Punktwolke
+        return float(axis_parallel[1])
+    return float(np.sort(extents)[1])

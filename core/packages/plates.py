@@ -14,12 +14,13 @@ from dataclasses import dataclass
 import numpy as np
 import trimesh
 
-from config import (PLATE_AXIS_SNAP_DEG, PLATE_MAX_THICKNESS_RATIO, SLOPE_MIN_AREA_RATIO, TOP_MIN_NORMAL_Z,
-                    WALL_MAX_NORMAL_Z)
+from config import (PLATE_AXIS_SNAP_DEG, PLATE_FACE_SHARE, PLATE_MAX_THICKNESS_RATIO, SLOPE_MIN_AREA_RATIO,
+                    TOP_MIN_NORMAL_Z, WALL_MAX_NORMAL_Z)
 
 # Klassen, deren Bauteile Pakete bilden können (Präfix, damit IfcWallStandardCase u.ä. mitzählen)
 PLATE_CLASSES = ("IfcWall", "IfcSlab", "IfcRoof", "IfcCovering", "IfcPlate", "IfcBuildingElementPart")
 _AXIS_COS = np.cos(np.radians(PLATE_AXIS_SNAP_DEG))        # Achse wird auf x/y/z eingerastet
+_FACE_PARALLEL_COS = np.cos(np.radians(10.0))              # Fläche zählt als parallel zur Dickenrichtung (±10°)
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,26 @@ def _wall(points: np.ndarray) -> Plate | None:
     normal_vector /= np.linalg.norm(normal_vector)
     lengthwise = np.array([-normal_vector[1], normal_vector[0], 0.0])
     return Plate(snap(np.array([normal_vector, lengthwise, [0.0, 0.0, 1.0]])), points)
+
+
+def is_straight(mesh: trimesh.Trimesh, normal_vector: np.ndarray, share: float = PLATE_FACE_SHARE) -> bool:
+    """True, wenn das Bauteil eine gerade Platte ist: mindestens ``share`` seiner Oberfläche liegt parallel zur Normale.
+
+    Bei einer gekrümmten oder L-förmigen Wand ist die kleinste Boxkante nicht die Dicke; ihre grossen Flächen zeigen
+    in viele Richtungen. Eine Skalierung entlang der Normale würde sie verzerren statt verdicken.
+    """
+    areas = mesh.area_faces
+    if areas.sum() <= 0:
+        return False
+    parallel = np.abs(mesh.face_normals @ normal_vector) >= _FACE_PARALLEL_COS
+    return bool(areas[parallel].sum() >= share * areas.sum())
+
+
+def mean_thickness(mesh: trimesh.Trimesh) -> float:
+    """Mittlere Dicke einer beliebig geformten Platte: 2 × Volumen / Oberfläche (NaN, wenn das Netz nicht geschlossen ist)."""
+    if not mesh.is_watertight or mesh.area <= 0:
+        return float("nan")
+    return float(2 * abs(mesh.volume) / mesh.area)
 
 
 def is_wall(normal_vector: np.ndarray) -> bool:

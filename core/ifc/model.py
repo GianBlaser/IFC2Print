@@ -25,12 +25,15 @@ import ifcopenshell
 import numpy as np
 import pandas as pd
 
-from config import SLOPE_DEG, OFFSET_THRESHOLD_MM, OFFSET_GRID_MM
+from config import SLOPE_DEG, SLOPE_MAX_RISE_RATIO, OFFSET_THRESHOLD_MM, OFFSET_GRID_MM
 from core.ifc.assignment import class_family, is_element
 from core.ifc.geometry import Geometry, triangulate
 from core.ifc.openings import Filler, find_fillers, find_voids
-from core.ifc.table import element_table
-from core.packages.plates import has_slope, Plate, plate, PLATE_CLASSES
+from core.ifc.table import element_table, obb_thickness, second_edge
+from core.packages.plates import has_slope, is_straight, mean_thickness, Plate, plate, PLATE_CLASSES
+
+
+THIN_RATIO = 0.25   # 2·V/A gilt als Dicke, wenn sie unter diesem Anteil der zweitkleinsten Boxkante liegt (dünner Körper)
 
 
 class IfcModel:
@@ -102,20 +105,45 @@ class IfcModel:
 
     @cached_property
     def plates(self) -> dict[str, Plate]:
-        """Plattenartige Bauteile (Wände, Decken, …) mit Dickenrichtung, je GUID (reale mm, Welt)."""
+        """Gerade plattenartige Bauteile (Wände, Decken, …) mit Dickenrichtung, je GUID (reale mm, Welt).
+
+        Gekrümmte und L-förmige Wände sind keine Platten (``is_straight``): Sie bilden kein Paket und werden
+        beim Erzeugen allseitig aufgedickt statt entlang einer Normale skaliert.
+        """
         result = {}
         for guid, geo in self.geometry.items():
             f = self.class_family_of(guid)
-            if f in PLATE_CLASSES and (p := plate(geo.verts, f == "IfcWall")):
+            if f in PLATE_CLASSES and (p := plate(geo.verts, f == "IfcWall")) and is_straight(geo.mesh(1), p.normal_vector):
                 result[guid] = p
         return result
 
     @cached_property
+    def thickness(self) -> dict[str, float]:
+        """Dicke je Bauteil (reale mm): kleinste Kante der orientierten Box; bei nicht geraden Platten der Plattenklassen
+        (gekrümmte, L-förmige Wände) die mittlere Dicke 2 × Volumen / Oberfläche, weil die Box dort die Länge misst."""
+        result = {}
+        for guid, geo in self.geometry.items():
+            box = obb_thickness(geo.verts)
+            if guid not in self.plates and self.class_family_of(guid) in PLATE_CLASSES:
+                mean = mean_thickness(geo.mesh(1))
+                # nur für dünne Körper gültig: ein kurzes Wandstück (Dicke ≈ Länge) misst die Box richtig
+                if np.isfinite(mean) and mean < box and mean < THIN_RATIO * second_edge(geo.verts):
+                    box = mean
+            result[guid] = box
+        return result
+
+    @cached_property
     def slope(self) -> set[str]:
-        """GUIDs der Decken, Dächer und Beläge mit Entwässerungsgefälle (Oberseite flach geneigt)."""
-        return {guid for guid, geo in self.geometry.items()
-                if self.class_family_of(guid) in ("IfcSlab", "IfcRoof", "IfcCovering")
-                and has_slope(geo.mesh(1), SLOPE_DEG)}
+        """GUIDs der Decken, Dächer und Beläge mit Entwässerungsgefälle (Oberseite flach geneigt), deren Höhenunterschied
+        höchstens SLOPE_MAX_RISE_RATIO Deckendicken beträgt – nur die werden eben gemacht."""
+        result = set()
+        for guid, geo in self.geometry.items():
+            if self.class_family_of(guid) not in ("IfcSlab", "IfcRoof", "IfcCovering") or (p := self.plates.get(guid)) is None:
+                continue
+            thickness = np.ptp(p.points @ p.normal_vector)
+            if np.ptp(geo.verts[:, 2]) <= (1 + SLOPE_MAX_RISE_RATIO) * thickness and has_slope(geo.mesh(1), SLOPE_DEG):
+                result.add(guid)
+        return result
 
     @cached_property
     def filler(self) -> list[Filler]:
@@ -133,4 +161,4 @@ class IfcModel:
 
         Die Spalten beschreibt ``element_table`` in core/ifc/table.py.
         """
-        return element_table(self.model, self.geometry, self.defective, self.schema_id)
+        return element_table(self.model, self.geometry, self.defective, self.schema_id, self.thickness)

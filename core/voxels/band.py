@@ -28,8 +28,6 @@ from scipy.ndimage import maximum_filter, minimum_filter
 
 from config import RAILING_GAP_VOXELS, RAILING_MAX_LOST_RATIO
 from core.analysis.ruleset import ScaleParameters
-from core.ifc.model import IfcModel
-from core.parts.roof import roof_name
 from core.voxels.grid import VoxelGrid
 from core.voxels.mesh_voxels import surface_voxel
 
@@ -57,8 +55,8 @@ def extend_grid(voxel_grid: VoxelGrid, lo: np.ndarray, hi: np.ndarray) -> np.nda
         return np.zeros(3, dtype=np.int64)
     margin = list(zip(pad_before, after))
     voxel_grid.matrix = np.pad(voxel_grid.matrix, margin)
-    if voxel_grid.roof is not None:
-        voxel_grid.roof = np.pad(voxel_grid.roof, margin, constant_values=-1)
+    if voxel_grid.owner is not None:
+        voxel_grid.owner = np.pad(voxel_grid.owner, margin, constant_values=-1)
     voxel_grid.floor_plans = {n: np.pad(g, margin[:2]) for n, g in voxel_grid.floor_plans.items()}
     voxel_grid.origin = voxel_grid.origin - pad_before * voxel_grid.pitch
     return pad_before.astype(np.int64)
@@ -116,24 +114,21 @@ def _highest_building(voxel_grid: VoxelGrid, gi: np.ndarray, gj: np.ndarray, k_t
     return np.where(voxel_columns & (deep[None, :] <= k_top[:, None]), deep[None, :], -1).max(axis=1)
 
 
-def place(voxel_grid: VoxelGrid, b: RailingBand, storey: str = "", roof: str | None = None) -> None:
-    """Schreibt ein Band ins Gitter und ordnet es dem Geschoss- bzw. Dachteil zu."""
+def place(voxel_grid: VoxelGrid, b: RailingBand, storey: str = "") -> None:
+    """Schreibt ein Band ins Gitter (ohne Bauteil: es folgt bei der Aufteilung dem Teil, auf dem es steht)."""
     for i, j, k0, k1 in zip(b.i, b.j, b.k_from, b.k_to):
         if k1 < k0:
             continue
         voxel_grid.matrix[i, j, k0:k1 + 1] = True
-        if roof is not None and voxel_grid.roof is not None and roof in voxel_grid.roof_names:
-            voxel_grid.roof[i, j, k0:k1 + 1] = voxel_grid.roof_names.index(roof)
-    if roof is None and storey in voxel_grid.floor_plans:
+    if storey in voxel_grid.floor_plans:
         voxel_grid.floor_plans[storey][b.i, b.j] = True
 
 
-def place_railing_bands(ifc: IfcModel, voxel_grid: VoxelGrid, railing: list, parameter: ScaleParameters,
-                        elevations: dict[str, float], zones: dict) -> list[str]:
+def place_railing_bands(voxel_grid: VoxelGrid, railing: list, parameter: ScaleParameters) -> list[str]:
     """Geländer (Aktion «band») als Scheibe ins Gitter, vor den Öffnungen; Rückgabe: Warnungen.
 
-    ``railing``: Paare (Zeile der Bauteiltabelle, Netz im Modellmass). ``elevations`` und ``zones``
-    entscheiden, ob ein Geländer zu einem Dachteil gehört (core/parts/roof.py).
+    ``railing``: Paare (Zeile der Bauteiltabelle, Netz im Modellmass). Zu welchem Teil ein Band gehört,
+    entscheidet die Aufteilung nach seiner Auflage (core/parts/cleanup.assign_by_support).
     """
     if parameter.min_thickness_railing_mm is None:
         return [f"{len(railing)} Geländer nicht gedruckt: bei {parameter.ruleset_name} gibt es keine Bänder."]
@@ -144,7 +139,7 @@ def place_railing_bands(ifc: IfcModel, voxel_grid: VoxelGrid, railing: list, par
         if railing_band is None:
             detached.append(f"{z.name or z.guid} ({lost_ratio:.0%} ohne Auflage)")
             continue
-        place(voxel_grid, railing_band, z.storey, roof_name(ifc, z, elevations, zones))
+        place(voxel_grid, railing_band, z.storey)
     if detached:
         return ["Geländer ohne Gebäude darunter nicht gedruckt: " + ", ".join(detached) + "."]
     return []

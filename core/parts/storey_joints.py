@@ -1,36 +1,39 @@
-"""Fugen zwischen den Geschossen: Höhe finden und je Spalte glätten.
+"""Fugen zwischen den Geschossen: Höhe finden und die Fuge eben halten.
 
-Zwischen zwei Geschossteilen liegt eine Fuge. Ihre Höhe entsteht in drei Schritten:
+Zwischen zwei Geschossteilen liegt eine Fuge. Ihre Höhe entsteht in zwei Schritten:
   1. ``cuts``: Fuge je Geschossgrenze = Deckenunterkante im Suchfenster um die Geschoss-Z,
      gezählt nur dort, wo dieses oder ein höheres Geschoss steht (Grundrisse seiner
      IFC-Bauteile). Ausserhalb gibt es keine Fuge – ein tieferer Gebäudeflügel wird
      nicht von der Fuge eines höheren geschnitten.
-  2. ``flush_slabs``: Eine Decke, die bündig an der Fuge liegt und über den Grundriss hinausragt,
-     erweitert die Fuge: Eine Decke gehört zum Teil darüber, das untere Teil bleibt oben offen.
-  3. ``smooth_joint``: Fuge je Spalte glätten: kleine Absätze unter der Fuge (Dämmung unter der
-     Decke) abschneiden, kleine Rücksprünge darüber auffüllen → die Unterseite des oberen
-     Teils bleibt eben. Breite, tiefer liegende Deckenbereiche (TG-Dach neben dem
-     Haus) gehen zunächst ganz ans untere Teil, statt zerschnitten zu werden.
-Danach trennt ``ceiling_lids`` solche tiefer liegenden Decken als eigenes Teil vom unteren ab
-(core/parts/partitioning.py): Als Deckel bräuchten sie Stützen in den Räumen darunter. Zum Schluss füllt
-``flat_undersides`` schmale Einstülpungen in der Unterseite jedes Geschossteils (Storenkasten, Laibungsschlitze).
+  2. ``level_joints``: Nachdem die Aufteilung (core/parts/partitioning.py) jedem Voxel sein Teil gegeben hat, wird
+     die Fuge je Spalte eben gehalten: Kleine Absätze des oberen Teils unter der Fuge (Dämmung unter der Decke,
+     eine Decke, deren Unterseite ein Voxel tiefer liegt) werden abgeschnitten, kleine Rücksprünge darüber
+     aufgefüllt → die Unterseite des oberen Teils ist eben und steht auf dem Bett wie auf dem Teil darunter.
 
 Falle (verifiziert am NEST-Modell): ``IfcBuildingStorey.Elevation`` ist relativ
 (EG = 0.0, Wände aber ab 432.6 m Welt-Z). Die Fugenhöhe kommt deshalb aus der
 ObjectPlacement im Weltsystem (``storey_heights``).
 
 Eingabe: Voxelgitter, Geschosshöhen [(Name, Welt-Z)], Grundrisse je Geschoss
-Ausgabe: Schichtbereich [k_from, k_to) je Geschoss (``cuts``) bzw. Fugenhöhe je Spalte (``smooth_joint``)
+Ausgabe: Schichtbereich [k_from, k_to) je Geschoss (``cuts``); ``level_joints`` verändert Gitter und Labels
 """
+
+from typing import NamedTuple
 
 import ifcopenshell.util.placement
 import ifcopenshell.util.unit
 import numpy as np
-from scipy.ndimage import binary_closing, binary_opening, label
 
 from config import JOINT_MIN_RISE, JOINT_SEARCH_WINDOW_ABOVE_M, JOINT_SEARCH_WINDOW_BELOW_M
 from core.ifc.assignment import room_names
 from core.voxels.grid import VoxelGrid
+
+
+class Joint(NamedTuple):
+    """Fuge unter einem Geschossteil: sein Label, die Schicht k und die Spalten, in denen die Fuge gilt."""
+    label: int
+    k: int
+    columns: np.ndarray
 
 
 def storey_heights(model: ifcopenshell.file, scale: int) -> list[tuple[str, float]]:
@@ -103,96 +106,33 @@ def storey_and_above(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]],
     return result
 
 
-def flush_slabs(m: np.ndarray, k: int, columns: np.ndarray, leveling: int, plate: int) -> np.ndarray:
-    """Fugenspalten samt den bündigen Decken, die mit der Decke im Grundriss zusammenhängen (2D-Maske).
+def level_joints(m: np.ndarray, labels: np.ndarray, joints: list[Joint], leveling: int) -> None:
+    """Hält jede Fuge eben (verändert ``m`` und ``labels``). Zahlen in Voxeln.
 
-    Bündig: Material bei k, das höchstens ``plate`` Voxel nach oben reicht (keine Wand, die durch die Fuge läuft),
-    darunter höchstens ``leveling`` Voxel (Deckenunterseite an der Fuge) oder eine Wand (länger als ``plate``),
-    auf der die Decke liegt. Tiefer liegende Decken (dazwischen) zählen nicht – sie trennt ``ceiling_lids``.
+    In den Spalten der Fuge gilt für das Teil darüber:
+      * Voxel des Teils bis ``leveling`` unter der Fuge (Dämmung unter der Decke, eine Decke, deren Unterseite ein
+        Voxel tiefer liegt) werden entfernt – sonst stünde das Teil auf dem Absatz statt auf seiner Unterseite.
+      * Ist die Fuge leer und beginnt das Teil höchstens ``leveling`` darüber (Decke dort dünner), wird bis zur
+        Fuge aufgefüllt – sonst hinge die Unterseite dort in der Luft.
+    Dächer, Deckel und das Teil darunter bleiben unberührt: Nur Voxel mit dem Label des oberen Teils ändern sich.
     """
-    return _with_flush_slabs(m[:, :, k], _run_length(m, k, 1, plate + 1), _run_length(m, k - 1, -1, plate + 1),
-                             columns, leveling, plate)
-
-
-def _with_flush_slabs(layer: np.ndarray, top: np.ndarray, bottom: np.ndarray, columns: np.ndarray, leveling: int,
-                      plate: int) -> np.ndarray:
-    """``flush_slabs`` mit schon gezählten Vollabschnitten über (``top``) und unter (``bottom``) der Fuge."""
-    flush = layer & (top <= plate) & ((bottom <= leveling) | (bottom > plate))
-    # Mit den Fugenspalten zusammen beschriften: die Aussenwände des oberen Geschosses stehen auf der Decke und
-    # trennen sie sonst in «innen» und «aussen».
-    regions, _ = label(flush | columns, structure=np.ones((3, 3), dtype=bool))
-    touching = np.unique(regions[columns])
-    return columns | (np.isin(regions, touching[touching > 0]) & flush)
-
-
-def ceiling_lids(part: np.ndarray, k_next: int, window: int, plate: int, wall: int) -> list[tuple[np.ndarray, int]]:
-    """Deckel eines Geschossteils: Decken, die das Teil oben abschliessen und unter denen ein Raum des Teils liegt.
-
-    ``part``: Maske des Teils; ``k_next``: Fuge zum Geschoss darüber (Schicht). Je Spalte zählt der oberste
-    Vollabschnitt (höchstens ``plate`` Voxel), wenn seine Oberseite im Suchfenster der Fuge liegt (ab
-    ``k_next - window``) und unter ihm Luft und weiter unten wieder das Teil liegt. Schmale Stellen (Stürze,
-    schmaler als 2 × ``wall``) zählen nicht; Wände bis 2 × ``wall`` Voxel Dicke zwischen zwei Deckelflächen gehören
-    zur Fläche. Jede Fläche wird waagrecht an ihrer häufigsten Deckenunterseite geschnitten; Wände darunter bleiben
-    beim Teil. Rückgabe je Deckel: (2D-Maske der Fläche, unterste Schicht des Deckels).
-    """
-    z0 = max(0, k_next - window - plate - 1)                         # nur das Suchfenster ansehen (Speicher)
-    sub = part[:, :, z0:]
-    nz = sub.shape[2]
-    has = sub.any(axis=2)
-    top = np.where(has, nz - 1 - np.argmax(sub[:, :, ::-1], axis=2), -1)
-    layer = np.arange(nz)[None, None, :]
-    air = ~sub & (layer < top[:, :, None])
-    gap = np.where(air.any(axis=2), nz - 1 - np.argmax(air[:, :, ::-1], axis=2), -1)   # oberste Luft unter top
-    below = np.logical_or.accumulate(sub, axis=2)                   # irgendwo darunter liegt das Teil
-    floor = part[:, :, :z0].any(axis=2) | (
-        (gap >= 1) & np.take_along_axis(below, np.maximum(gap - 1, 0)[:, :, None], axis=2)[:, :, 0])
-    near = has & (top + z0 >= k_next - window)
-    slab = near & (gap >= 0) & (top - gap <= plate) & floor
-    areas = binary_opening(slab, structure=np.ones((3, 3), dtype=bool), iterations=wall + 1)
-    if not areas.any():
-        return []
-    # gepolstert schliessen: sonst frisst das Schliessen den Deckel am Gitterrand an (dort steht die Aussenwand)
-    areas = binary_closing(np.pad(areas, wall), structure=np.ones((3, 3), dtype=bool), iterations=wall)[
-        wall:-wall, wall:-wall] & near if wall else areas
-    regions, n = label(areas, structure=np.ones((3, 3), dtype=bool))
-    lids = []
-    for number in range(1, n + 1):
-        region = regions == number
-        undersides = gap[region & slab] + 1
-        if len(undersides):
-            lids.append((region, z0 + int(np.bincount(undersides).argmax())))   # häufigste Deckenunterseite
-    return lids
-
-
-def flat_undersides(labels: np.ndarray, m: np.ndarray, joints: list[tuple[int, int, np.ndarray]], depth: int,
-                    radius: int) -> dict[int, tuple[int, int]]:
-    """Füllt schmale Einstülpungen in der Unterseite der Geschossteile bis zur Fuge (verändert ``labels`` und ``m``).
-
-    ``joints``: je Geschossteil (Label, Fugenschicht k, 2D-Maske der Spalten mit Fuge bei k). Einstülpung = Spalte, in der
-    die unterste Schicht des Teils 1 bis ``depth`` Voxel über k liegt (Storenkasten-Rinne, Laibungsschlitz eines Fensters
-    darunter, Fuge zwischen Bauteilen). Gefüllt werden nur schmale – Bereiche, die eine Öffnung mit Radius ``radius``
-    überstehen (Treppenauge), bleiben – und nur über Luft oder Voxeln tieferer Geschosse; Dächer und Deckel bleiben.
-    Läuft vor dem Vernetzen und den Steckverbindern: deren Taschen entstehen erst danach im Netz.
-    Rückgabe je Teil mit Füllung: (Anzahl Einstülpungen, gefüllte Voxel).
-    """
-    result = {}
-    for part_label, k, columns in joints:
-        top = min(labels.shape[2], k + depth + 1)
-        window = labels[:, :, k:top]                                        # Sicht: Schreiben wirkt auf ``labels``
-        part = window == part_label
-        lift = part.argmax(axis=2)                                          # Schichten zwischen Fuge und Unterseite
-        recess = columns & part.any(axis=2) & (lift > 0)
-        if not recess.any():
-            continue
-        narrow = recess & ~binary_opening(recess, structure=np.ones((3, 3), dtype=bool), iterations=radius)
-        below = np.arange(top - k)[None, None, :] < lift[:, :, None]
-        narrow &= ~(below & (window > part_label)).any(axis=2)             # Dach- oder Deckelvoxel: nicht anfassen
-        fill = narrow[:, :, None] & below
-        if fill.any():
-            window[fill] = part_label
-            m[:, :, k:top] |= fill
-            result[part_label] = (label(narrow, structure=np.ones((3, 3), dtype=bool))[1], int(fill.sum()))
-    return result
+    nz = m.shape[2]
+    for joint in joints:
+        value, k, columns = joint
+        for d in range(1, leveling + 1):
+            if k - d >= 0:
+                trim = columns & (labels[:, :, k - d] == value)
+                labels[:, :, k - d][trim] = -1
+                m[:, :, k - d][trim] = False
+        gap = _run_length(~m, k, 1, leveling + 1)
+        start = np.minimum(k + gap, nz - 1)
+        starts_here = np.take_along_axis(labels, start[:, :, None], axis=2)[:, :, 0] == value
+        fill_up = columns & ~m[:, :, k] & (gap <= leveling) & (k + gap < nz) & starts_here
+        for d in range(leveling):
+            if k + d < nz:
+                selected = fill_up & (gap > d)
+                m[:, :, k + d] |= selected
+                labels[:, :, k + d][selected] = value
 
 
 def _run_length(m: np.ndarray, start: int, step: int, n: int) -> np.ndarray:
@@ -206,43 +146,3 @@ def _run_length(m: np.ndarray, start: int, step: int, n: int) -> np.ndarray:
         running &= m[:, :, k]
         tally += running
     return tally
-
-
-def smooth_joint(m: np.ndarray, k: int, columns: np.ndarray, leveling: int, plate: int,
-                  width: int, flush: bool = False) -> np.ndarray:
-    """Glättet die Fuge auf Schicht ``k`` (verändert ``m``) und liefert die Fugenhöhe je Spalte.
-
-    In den ``columns`` (2D-Maske) gilt je Spalte (Zahlen in Voxeln):
-      * Vollabschnitt durch die Fuge länger als ``plate`` → Wand: Fuge bei k.
-      * Decke oder Wand, die höchstens ``leveling`` unter die Fuge ragt (darunter leer) → der
-        Überstand wird abgeschnitten (Dämmung/Bekleidung, Deckenunterseite unter einer Wand des
-        oberen Geschosses); sonst bliebe er als dünne Schicht oben auf dem unteren Teil liegen.
-      * Decke, die tiefer ragt und zu einem mindestens ``width`` breiten Bereich gehört
-        (tiefer liegende Decke) → Fuge über der Decke: sie geht ganz ans untere Teil.
-        Schmale Bereiche (Unterzug) werden bei k geschnitten.
-      * Leer bei k, aber Material höchstens ``leveling`` darüber → bis k aufgefüllt.
-    Ausserhalb der ``columns`` keine Fuge (Höhe = Gitterhöhe). ``flush``: die Spalten erst um bündige Decken
-    erweitern (``flush_slabs``, mit denselben Vollabschnitten gezählt).
-    """
-    nz = m.shape[2]
-    top = _run_length(m, k, 1, plate + 1)
-    bottom = _run_length(m, k - 1, -1, plate + 1)
-    if flush:
-        columns = _with_flush_slabs(m[:, :, k], top, bottom, columns, leveling, plate)
-    height = np.where(columns, k, nz).astype(np.int32)
-    full = m[:, :, k] & columns
-    slab = full & (top + bottom <= plate)
-    trim = full & (bottom <= leveling)
-    deep = slab & (bottom > leveling)
-    if width > 0 and deep.any():
-        deep = binary_opening(deep, structure=np.ones((3, 3), dtype=bool), iterations=width)
-    height[deep] = k + top[deep]
-    gap = _run_length(~m, k, 1, leveling + 1)
-    fill_up = columns & ~m[:, :, k] & (gap <= leveling) & (k + gap < nz)
-    for d in range(1, leveling + 1):
-        if k - d >= 0:
-            m[:, :, k - d] &= ~(trim & (bottom >= d))
-    for d in range(leveling):
-        if k + d < nz:
-            m[:, :, k + d] |= fill_up & (gap > d)
-    return height

@@ -103,6 +103,15 @@ SLOPE_MIN_AREA_RATIO = 0.5      # «überwiegend»: mindestens die Hälfte der O
 TOP_MIN_NORMAL_Z = 0.5          # als Oberseite zählen Flächen, die höchstens 60° geneigt sind (cos 60° = 0.5)
 
 PLATE_MAX_THICKNESS_RATIO = 0.5  # plattenartig: Dicke höchstens die Hälfte der zweitkleinsten Kante
+# Gerade Platte (core/packages/plates.is_straight): mindestens dieser Anteil der Oberfläche liegt parallel zur Dickenrichtung
+# (die beiden grossen Flächen). Gekrümmte, L- und U-förmige Wände fallen darunter: Ihre Dicke ist nicht die kleinste
+# Boxkante, sie bilden kein Paket und werden stattdessen allseitig auf die Mindestdicke aufgedickt (core/voxels/elements.py).
+# Eine gerade Wand mit Fenstern liegt bei 0.75 bis 0.95, eine L-Wand bei 0.5, eine gekrümmte unter 0.2.
+PLATE_FACE_SHARE = 0.6
+# Gefälle wird nur geebnet, wenn der Höhenunterschied der Decke höchstens so viele Deckendicken beträgt: Ein Flachdach mit
+# 1.5 % Gefälle (10 m → 15 cm) wird eben, eine lange geneigte Tiefgaragendecke bleibt geneigt und wird als Treppe gedruckt
+# (die Ebnung füllte sie sonst von der tiefsten bis zur höchsten Stelle auf ein Mehrfaches ihrer Dicke).
+SLOPE_MAX_RISE_RATIO = 1.0
 PLATE_AXIS_SNAP_DEG = 0.5       # Plattenrichtungen bis so nahe an x/y/z werden auf die Achse eingerastet
                                 # (Modellierungsungenauigkeit, sonst entstehen schräge Voxeltreppen)
 WALL_MAX_NORMAL_Z = 0.5         # Wand: Normale höchstens 30° aus der Waagrechten (Platte steiler als 60°)
@@ -136,29 +145,16 @@ RAILING_MAX_LOST_RATIO = 0.5    # Geländer entfällt, wenn mehr als die Hälfte
 # Volumens werden gefüllt: unsichtbar, ohne Stützen im Innern druckbar und im Slicer keine Scheinobjekte.
 # Grössere (z.B. ein geschlossener Dachraum) blieben sonst als viel Mehrmaterial – sie bleiben hohl, mit Warnung.
 CAVITY_FILL_RATIO = 0.05
-ROOF_ZONE_MIN_HEIGHT_MM = 1000   # Dachschale mindestens so hoch (real): Träger darin zählen zum Dach
+ROOF_ZONE_MIN_HEIGHT_MM = 1000   # Dachschale mindestens so hoch (real): Träger darin zählen zum Dach, und erst dann
+                                 # wird sie ein eigenes Dachteil – ein flacheres «Dach» (Vordach) gilt als Decke
 
-# Geschossteile (core/parts/), reale mm: Die Fuge zwischen zwei Geschossen bleibt eben.
-# Absätze bis JOINT_LEVELING_MM unter der Fuge (Dämmung, Bekleidung unter einer Decke) werden
-# abgeschnitten, Rücksprünge bis dahin über der Fuge aufgefüllt. Ein Vollabschnitt bis
-# JOINT_SLAB_MM gilt als Decke (darüber: Wand); tiefer liegende Deckenbereiche, die breiter als
-# JOINT_WIDTH_MM sind (z.B. TG-Dach neben dem Haus), werden nicht zerschnitten – liegen sie als Deckel über
-# Räumen, werden sie ein eigenes Teil (core/parts/storey_joints.ceiling_lids).
+# Geschossteile (core/parts/), reale mm: Die Fuge zwischen zwei Geschossen bleibt eben. Absätze des oberen Teils
+# bis JOINT_LEVELING_MM unter der Fuge (Dämmung, Bekleidung unter einer Decke, eine Decke mit tieferer Unterseite)
+# werden abgeschnitten, Rücksprünge bis dahin über der Fuge aufgefüllt (core/parts/storey_joints.level_joints).
 JOINT_LEVELING_MM = 150.0
-JOINT_SLAB_MM = 1000.0
-JOINT_WIDTH_MM = 2000.0
-# Deckel (core/parts/storey_joints.ceiling_lids): Wände bis zu dieser Dicke (real) zwischen zwei Deckenflächen gehören
-# zum Deckel; schmalere Deckenstreifen (Stürze über Türen und Fenstern) bilden keinen.
-JOINT_WALL_MAX_MM = 500.0
-# Tiefer als die Unterseite des Teils ragende Stücke (letzte Treppenstufen in der Deckenöffnung) gehen bis zu dieser
-# Tiefe (real) ans Teil darunter, sonst hingen sie unter der Bodenplatte und höben das Teil vom Bett ab.
-JOINT_OVERHANG_MM = 500.0
-# Unterseite eben (core/parts/storey_joints.flat_undersides): Einstülpungen in der Unterseite eines Geschossteils,
-# schmaler als JOINT_RECESS_WIDTH_MM (real, schmale Seite im Grundriss) und höchstens JOINT_RECESS_DEPTH_MM tief,
-# werden bis zur Fuge gefüllt: Storenkasten-Rinnen (160–250 mm), Laibungsschlitze von Fenstern darunter, Fugen zwischen
-# Bauteilen. Treppenaugen (ab ~900 mm) und durchgehende Schächte bleiben offen. Die Tiefe deckt Decke samt Bodenaufbau.
-JOINT_RECESS_WIDTH_MM = 300.0
-JOINT_RECESS_DEPTH_MM = 500.0
+# Decke höchstens so dick (real): Über der Fuge wird bis hierhin die Unterseite der Decke gesucht, an der Wände und
+# Stützen des Geschosses darunter je Spalte abgeschnitten werden (dünnere Decke → der Wandkopf bleibt unten).
+JOINT_SLAB_MAX_MM = 1000.0
 # Suchfenster um die Geschoss-Z (reale m), in dem die Deckenunterkante gesucht wird: nach unten
 # tief genug für dicke, geebnete Bodenplatten samt Magerbeton, nach oben nur knapp.
 JOINT_SEARCH_WINDOW_BELOW_M = 1.2
@@ -166,13 +162,22 @@ JOINT_SEARCH_WINDOW_ABOVE_M = 0.2
 # Mindest-Anstieg der Voxelzahl (Anteil der Grundfläche), damit eine Schicht als Deckenunterkante
 # gilt. Sonst: Schnitt auf Geschoss-Z + Warnung.
 JOINT_MIN_RISE = 0.05
-# Dächer werden eigene Teile, sofern sie mindestens diesen Anteil am Volumen haben; Inseln
-# (abgetrennte Stücke eines Teils, kleiner als ISLAND_RATIO des Hauptstücks) gehen ans Nachbarteil.
-ROOF_MIN_RATIO = 0.02
-ISLAND_RATIO = 0.25
+# Deckel (core/parts/ownership.py): Eine Decke wird ein eigenes Teil «Decke <Geschoss>», wenn sie mindestens
+# LID_MIN_AREA_M2 (real) gross ist, in weniger als LID_ATTACHED_RATIO ihrer Spalten auf dem eigenen Teil
+# aufliegt (sonst ist sie Bodenaufbau oder Boden) und in mindestens LID_MIN_BELOW_RATIO ihrer Spalten Material des
+# eigenen Teils unter sich hat (Wände, Stützen: sie liegt über Räumen). Ein Vordach hat nichts unter sich und bleibt
+# auskragend beim Geschoss; ein Podest ist zu klein. Liegt eine Platte zu LID_ATTACHED_RATIO auf einem anderen Teil
+# (Belag auf einem Deckel), geht sie mit ihm.
+# Aufliegen heisst: weniger als LID_MIN_CLEARANCE_MM Luft (real, mm) zum nächsten Material darunter bzw. darüber – ein
+# Hohlraumboden oder eine Dämmung unter der Decke liegt auf, eine Terrasse über einem Raum (≥ 2 m) nicht.
+LID_MIN_AREA_M2 = 12.0
+LID_ATTACHED_RATIO = 0.5
+LID_MIN_BELOW_RATIO = 0.02
+LID_MIN_CLEARANCE_MM = 1000.0
 # Lose Splitter: Stücke unter dieser Voxelzahl ohne jeden Kontakt zu einem Teil werden gelöscht.
 SLIVER_MAX_VOXELS = 64
-# Ganze Teile unter diesem Anteil am Gesamtvolumen gehen ans Nachbarteil mit der grössten Kontaktfläche.
+# Ganze Geschossteile unter diesem Anteil am Gesamtvolumen gehen ans Nachbarteil mit der grössten Kontaktfläche;
+# Dächer und Deckel bleiben eigene Teile.
 SMALL_PART_RATIO = 0.01
 # Dachschale (core/parts/roof.roof_part): Dachbauteile sind Dach, wenn sie steiler als ROOF_INCLINATION_DEG
 # geneigt sind oder (flach) mehr als ROOF_ABOVE_ELEVATION_MM (real) über der Kote ihres Geschosses liegen.

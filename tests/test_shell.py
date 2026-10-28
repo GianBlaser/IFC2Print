@@ -5,7 +5,7 @@ import pytest
 import trimesh
 
 from core.voxels.element_voxels import element_voxel, fill_cores, flatten, thicken, thickening_voxel
-from core.voxels.grid import BuildingElement, VoxelGrid
+from core.voxels.grid import BuildingElement, Owner, VoxelGrid
 from core.voxels.mesh_voxels import frame, inside_voxel, surface_voxel
 from core.voxels.shell import close_gaps, voxelize
 
@@ -171,13 +171,29 @@ def test_flatten_fills_slope_to_flat_plate():
     assert (flat | m).sum() == flat.sum()               # nur ergänzt, nichts entfernt
 
 
-def test_voxelize_collects_floor_plans_and_roof():
-    wall = BuildingElement(_box((1, 10, 5), (0.5, 5, 2.5)), storey="EG")
-    roof = BuildingElement(_box((10, 10, 1), (5, 5, 5.5)), roof="Dach EG")
-    voxel_grid = voxelize([wall, roof], 1.0, 200)
-    assert set(voxel_grid.floor_plans) == {"EG"} and voxel_grid.roof_names == ["Dach EG"]
-    assert (voxel_grid.roof == 0).sum() == 100
-    assert voxel_grid.floor_plans["EG"].sum() == 10
+def test_voxelize_collects_floor_plans_owners_and_roof():
+    wall = BuildingElement(_box((1, 10, 5), (0.5, 5, 2.5)), storey="EG", guid="wand")
+    slab = BuildingElement(_box((10, 10, 1), (5, 5, 5.5)), storey="EG", horizontal=True, guid="decke")
+    roof = BuildingElement(_box((10, 10, 1), (5, 5, 8.5)), roof="Dach EG", guid="dach")
+    voxel_grid = voxelize([wall, slab, roof], 1.0, 200)
+    assert set(voxel_grid.floor_plans) == {"EG"}              # das Dachbauteil gehört zu keinem Grundriss
+    assert voxel_grid.floor_plans["EG"].sum() == 100          # Wand und Decke, Lücken geschlossen
+    assert voxel_grid.owners == [Owner("wand", "EG", None, False), Owner("decke", "EG", None, True),
+                                 Owner("dach", "", "Dach EG", False)]
+    assert voxel_grid.owner.shape == voxel_grid.matrix.shape
+    assert (voxel_grid.owner == 2).sum() == 100               # das Dach: 10 × 10 × 1
+    assert (voxel_grid.owner == 1).sum() == 100
+    assert (voxel_grid.owner[~voxel_grid.matrix] == -1).all() and (voxel_grid.owner[voxel_grid.matrix] >= 0).any()
+    assert [o.roof for o in voxel_grid.owners if o.roof] == ["Dach EG"]
+
+
+def test_voxelize_slab_wins_where_a_wall_runs_through_it():
+    wall = BuildingElement(_box((1, 1, 10), (5.5, 5.5, 5)), storey="EG", guid="wand")
+    slab = BuildingElement(_box((10, 10, 1), (5.5, 5.5, 5.5)), storey="EG", horizontal=True, guid="decke")
+    voxel_grid = voxelize([slab, wall], 1.0, 200)             # Reihenfolge der Eingabe egal: waagrechte Platten zuletzt
+    owners = {o.guid: i for i, o in enumerate(voxel_grid.owners)}
+    assert (voxel_grid.owner == owners["decke"]).sum() == 100  # die Decke ist vollständig
+    assert (voxel_grid.owner == owners["wand"]).sum() == 9    # der Wand fehlt der Voxel, in dem die Decke liegt
 
 
 def test_count_inside_body():
