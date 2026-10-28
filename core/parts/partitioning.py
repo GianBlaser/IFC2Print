@@ -10,9 +10,9 @@ Ablauf (``partition_grid``):
      der Decke darüber.
   2. Dächer und waagrechte Platten werden nie zerschnitten: Sie gehen als Ganzes an ein Teil, Dächer und Deckel
      (Decken über Räumen ohne Auflage) werden eigene Teile (core/parts/ownership.py).
-  3. Fugen eben halten: kleine Absätze unter der Fuge abschneiden, Rücksprünge darüber auffüllen
-     (storey_joints.level_joints).
-  4. Abgetrennte Stücke dem Teil geben, auf dem sie stehen; Kleinteile ans Nachbarteil (core/parts/cleanup.py).
+  3. Abgetrennte Stücke dem Teil geben, auf dem sie stehen; Kleinteile ans Nachbarteil (core/parts/cleanup.py).
+  4. Zuletzt die Fugen eben halten: kleine Absätze unter der Fuge abschneiden, Rücksprünge darüber auffüllen
+     (storey_joints.level_joints) – so steht jedes Geschossteil mit seiner Fuge auf dem Bett.
 Danach vernetzt ``mesh_pieces`` jedes Teil einzeln; die Anordnung auf dem Druckbett liegt in
 core/parts/print_layout.py.
 
@@ -77,8 +77,8 @@ def partition_grid(voxel_grid: VoxelGrid, storeys: list[tuple[str, float]], scal
     labels[~m] = -1
     names = [name for name, _, _ in ranges]
     assign_whole_elements(labels, names, voxel_grid, joints, voxel_per_m, leveling, horizontal)
-    level_joints(m, labels, joints, leveling)
     warnings += assign_with_message(labels, names, len(ranges), voxel_grid.pitch)
+    level_joints(m, labels, joints, leveling)      # zuletzt: danach ändert nichts mehr die Unterseite eines Teils
     return Partition(labels, names, warnings)
 
 
