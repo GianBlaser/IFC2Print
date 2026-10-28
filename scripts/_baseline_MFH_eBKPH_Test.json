@@ -11,13 +11,13 @@
   "gedruckt_total": 75,
   "huelle_gesamt": {
     "watertight": true,
-    "volumen_cm3": 88.31,
+    "volumen_cm3": 88.3,
     "voxel": 1381181
   },
   "fugen_warnungen": [
     "Ohne eigene Regel, von der Oberklasse übernommen: IfcElectricDistributionBoard → IfcDistributionElement (7), IfcFurniture → IfcFurnishingElement (13), IfcPipeSegment → IfcDistributionElement (12), IfcSanitaryTerminal → IfcDistributionElement (24), IfcSpaceHeater → IfcDistributionElement (6), IfcTank → IfcDistributionElement (1), IfcUnitaryEquipment → IfcDistributionElement (1).",
     "3 Bauteile als Umgebung nicht gedruckt. Name, Typ oder Layer deuten auf Gelände oder Stützmauer hin – je Bauteil in der Tabelle übersteuerbar.",
-    "0 abgetrennte Stücke dem Teil gegeben, auf dem sie stehen, lose Splitter ohne Kontakt entfernt (9 mm³).",
+    "0 abgetrennte Stücke dem Teil gegeben, auf dem sie stehen, lose Splitter ohne Kontakt entfernt (17 mm³).",
     "7 Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).",
     "Überhänge: alle Teile ohne Stützen druckbar (5.5 cm² als Brücken bis 10 mm)."
   ],
@@ -34,8 +34,8 @@
     },
     "EG": {
       "watertight": true,
-      "dreiecke": 144144,
-      "volumen_cm3": 20.44,
+      "dreiecke": 144068,
+      "volumen_cm3": 20.43,
       "bbox_mm": [
         102.0,
         62.0,
@@ -44,7 +44,7 @@
     },
     "1. OG": {
       "watertight": true,
-      "dreiecke": 151584,
+      "dreiecke": 151506,
       "volumen_cm3": 21.15,
       "bbox_mm": [
         102.0,
@@ -54,7 +54,7 @@
     },
     "2. OG": {
       "watertight": true,
-      "dreiecke": 154044,
+      "dreiecke": 153968,
       "volumen_cm3": 21.53,
       "bbox_mm": [
         102.0,

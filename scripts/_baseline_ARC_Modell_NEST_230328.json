@@ -14,19 +14,19 @@
   "huelle_gesamt": {
     "watertight": true,
     "volumen_cm3": 614.0,
-    "voxel": 9573356
+    "voxel": 9573345
   },
   "fugen_warnungen": [
     "Teile folgen der Regel ihres Ganzen: IfcMember → IfcRoof (92), IfcPlate → IfcCurtainWall (22), IfcPlate → IfcRoof (36), IfcStairFlight → IfcStair (25).",
     "Modell in Landeskoordinaten. Für den Export um 2'688'600 m / 1'250'800 m verschoben.",
-    "864 abgetrennte Stücke dem Teil gegeben, auf dem sie stehen, lose Splitter ohne Kontakt entfernt (1 mm³).",
+    "874 abgetrennte Stücke dem Teil gegeben, auf dem sie stehen.",
     "Teil «OG05» ist kleiner als 1% des Modells und wurde an das Nachbarteil angehängt (kein eigenes STL).",
     "«EG00»: geschlossene Hohlräume gefüllt (3, 230 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
     "«OG01»: geschlossene Hohlräume gefüllt (6, 407 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
     "«OG02»: geschlossene Hohlräume gefüllt (7, 533 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
     "«OG03»: geschlossene Hohlräume gefüllt (4, 248 mm³) – unsichtbar, sonst bräuchten sie innen Stützen und wären im Slicer eigene Objekte.",
     "92 Öffnungen ohne Fenster oder Tür ausgeschnitten (Treppenaugen, Schächte, Durchgänge).",
-    "Überhang «OG01»: 256.7 cm² brauchen Stützen, davon 16.1 cm² über dem Modell; grösste Stelle 224 × 205 mm, 0.4 mm über dem Bett (IfcSlab «Geschossdecke:F1.2_DAoT_Akustikdämmung_0.08:1053637»). Vorschlag: Stützen nur vom Druckbett aus genügen (Slicer: «Stützen nur auf dem Druckbett»).",
+    "Überhang «OG01»: 16.1 cm² brauchen Stützen, davon 16.1 cm² über dem Modell; grösste Stelle 63 × 50 mm, 4.0 mm über dem Bett (IfcSlab «Geschossdecke:F1.2__0.06:1058033»). Vorschlag: Stützen stünden im Modell und lassen sich kaum entfernen – das Bauteil besser dem Teil darüber oder dem Dachteil zuordnen (03 Regeln, Ausnahme je Bauteil).",
     "Überhang «OG02»: 15.2 cm² brauchen Stützen, davon 15.2 cm² über dem Modell; grösste Stelle 46 × 43 mm, 4.4 mm über dem Bett (IfcSlab «Geschossdecke:F1.2__0.06:1066560»). Vorschlag: Stützen stünden im Modell und lassen sich kaum entfernen – das Bauteil besser dem Teil darüber oder dem Dachteil zuordnen (03 Regeln, Ausnahme je Bauteil).",
     "Überhang «OG03»: 40.8 cm² brauchen Stützen, davon 19.0 cm² über dem Modell; grösste Stelle 67 × 60 mm, 4.4 mm über dem Bett (IfcSlab «Geschossdecke:F1.2__0.06:1069173»). Vorschlag: Stützen nur vom Druckbett aus genügen (Slicer: «Stützen nur auf dem Druckbett»).",
     "Überhang «OG04»: 19.1 cm² brauchen Stützen, davon 0.5 cm² über dem Modell; grösste Stelle 70 × 54 mm, 3.6 mm über dem Bett (IfcSlab «Geschossdecke:F1.2_DAoT_Akustikdämmung_0.08:1068632»). Vorschlag: Stützen nur vom Druckbett aus genügen (Slicer: «Stützen nur auf dem Druckbett»).",
@@ -55,12 +55,12 @@
     },
     "OG01": {
       "watertight": true,
-      "dreiecke": 586476,
+      "dreiecke": 586472,
       "volumen_cm3": 110.74,
       "bbox_mm": [
         224.4,
         205.2,
-        21.2
+        20.9
       ]
     },
     "OG02": {
