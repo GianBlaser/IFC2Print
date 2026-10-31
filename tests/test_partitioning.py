@@ -1,4 +1,4 @@
-"""Tests für core/parts/partitioning: Geschoss-Fugen und Druckbett-Packing."""
+"""Tests für core/parts/partitioning: Geschoss-Fugen, ganze Bauteile (Decken, Dächer, Deckel) und Druckbett-Packing."""
 
 from pathlib import Path
 
@@ -8,11 +8,10 @@ import trimesh
 
 from core.ifc.model import IfcModel
 from core.parts import partitioning
-from core.parts.cleanup import assign_islands, assign_small_pieces, assign_with_message, without_sliver
+from core.parts.cleanup import assign_by_support, assign_small_pieces, assign_with_message, without_sliver
 from core.parts.print_layout import pack, print_plate
-from core.parts.storey_joints import (cuts, flat_undersides, flush_slabs, smooth_joint, storey_and_above,
-                                      storey_heights)
-from core.voxels.grid import VoxelGrid
+from core.parts.storey_joints import Joint, cuts, level_joints, storey_and_above, storey_heights
+from core.voxels.grid import Owner, VoxelGrid
 
 _MFH = Path(__file__).parent.parent / "testdaten" / "MFH_eBKPH_Real.ifc"
 
@@ -85,7 +84,14 @@ def test_print_plate_lies_at_z0():
     assert plate.bounds[1][2] == pytest.approx(20)
 
 
-# --- Fuge glätten, Teile, Inseln -------------------------------------------------
+# --- Fuge eben halten (level_joints) -------------------------------------------------
+
+def _labelled(m: np.ndarray, joint: int) -> np.ndarray:
+    """Label-Gitter zu ``m``: unter der Fuge Teil 0, ab Schicht ``joint`` Teil 1, leer = −1."""
+    labels = np.where(m, 0, -1).astype(np.int16)
+    labels[:, :, joint:] = np.where(m[:, :, joint:], 1, -1)
+    return labels
+
 
 def _slab_with_ledge():
     """Raum (Wände x=0, x=19) mit Decke ab Schicht 10; unter x = 5..9 hängt 1 Schicht Dämmung."""
@@ -98,36 +104,42 @@ def _slab_with_ledge():
 
 def test_ledge_below_the_joint_is_trimmed():
     m = _slab_with_ledge()
-    height = smooth_joint(m, 10, np.ones((20, 6), dtype=bool), leveling=2, plate=5, width=0)
-    assert not m[5:10, :, 9].any()                      # Dämmung weg → Unterseite des oberen Teils eben
-    assert (height == 10).all() and m[0, :, 9].all()     # Wände bleiben
+    labels = _labelled(m, 10)
+    labels[5:10, :, 9] = 1                              # die Dämmung gehört zum oberen Teil
+    level_joints(m, labels, [Joint(1, 10, np.ones((20, 6), dtype=bool))], leveling=2)
+    assert not m[5:10, :, 9].any() and (labels[5:10, :, 9] == -1).all()   # weg → Unterseite des oberen Teils eben
+    assert m[0, :, 9].all() and (labels[0, :, 9] == 0).all()              # Wand des unteren Teils bleibt
 
 
 def test_setback_above_the_joint_is_filled_up():
     m = np.zeros((20, 6, 20), dtype=bool)
     m[:, :, 10:13] = True
     m[5:10, :, 10] = False                              # Decke dort 1 Schicht dünner (Unterseite höher)
-    smooth_joint(m, 10, np.ones((20, 6), dtype=bool), leveling=2, plate=5, width=0)
-    assert m[:, :, 10].all()
+    labels = _labelled(m, 10)
+    level_joints(m, labels, [Joint(1, 10, np.ones((20, 6), dtype=bool))], leveling=2)
+    assert m[:, :, 10].all() and (labels[:, :, 10] == 1).all()
 
 
-def test_deep_wide_slab_goes_all_the_way_down_narrow_girder_is_cut():
-    m = np.zeros((30, 30, 20), dtype=bool)
-    m[:, :, 10:13] = True                               # Decke, Fuge bei 10
-    m[:15, :, 6:10] = True                              # links: Decke reicht 4 Schichten tiefer (breit)
-    m[20:22, :, 6:10] = True                            # rechts: Unterzug, 2 Voxel breit
-    height = smooth_joint(m, 10, np.ones((30, 30), dtype=bool), leveling=2, plate=8, width=3)
-    assert (height[3:12, 3:27] == 13).all()              # über der tiefen Decke → ganze Decke unten
-    assert (height[20:22, :] == 10).all()                # Unterzug: Schnitt bei 10
-    assert m[20:22, :, 6:10].all()                      # und bleibt erhalten
+def test_deep_recess_and_lower_part_stay_untouched():
+    """Was tiefer als ``leveling`` liegt, ist kein Absatz mehr: Es bleibt, ebenso alles vom unteren Teil."""
+    m = np.zeros((20, 6, 20), dtype=bool)
+    m[:, :, 10:13] = True
+    m[5:10, :, 10:13] = False                           # Decke dort erst ab Schicht 13: 3 Voxel Rücksprung
+    m[:, :, 5:8] = True                                 # Boden des unteren Teils
+    labels = _labelled(m, 10)
+    before_m, before_labels = m.copy(), labels.copy()
+    level_joints(m, labels, [Joint(1, 10, np.ones((20, 6), dtype=bool))], leveling=2)
+    assert (m == before_m).all() and (labels == before_labels).all()
 
 
-def test_without_floor_plan_no_joint():
+def test_joint_only_levels_inside_its_columns():
     m = _slab_with_ledge()
+    labels = _labelled(m, 10)
+    labels[5:10, :, 9] = 1
     columns = np.zeros((20, 6), dtype=bool)
-    columns[10:] = True
-    height = smooth_joint(m, 10, columns, leveling=2, plate=5, width=0)
-    assert (height[:10] == 20).all() and (height[10:] == 10).all()
+    columns[10:] = True                                 # Fuge gilt nur rechts; die Dämmung liegt links
+    level_joints(m, labels, [Joint(1, 10, columns)], leveling=2)
+    assert m[5:10, :, 9].all() and (labels[5:10, :, 9] == 1).all()
 
 
 def test_joint_applies_where_this_or_higher_storey_stands():
@@ -140,31 +152,261 @@ def test_joint_applies_where_this_or_higher_storey_stands():
     assert above_mask["EG"][:, 0].tolist() == [True, True, True, False]
 
 
-def test_islands_switch_to_neighbor_slivers_are_dropped():
-    labels = np.full((20, 20, 20), -1, dtype=np.int16)
-    labels[0:10] = 0                                    # Teil 0
-    labels[10:20] = 1                                   # Teil 1
-    labels[12:14, 5:7, 5:7] = 0                         # Insel von 0 mitten in 1
-    labels[17:20, 17:20, 17:20] = -1
-    labels[18, 18, 18] = 1                              # loser Splitter von 1 (ohne Kontakt)
-    assign_islands(labels)
-    assert (labels[12:14, 5:7, 5:7] == 1).all()
-    assert labels[18, 18, 18] == -1
+# --- Ganze Bauteile: Decken, Dächer, Deckel (partition_grid) --------------------------------------
+# Massstab 200, Pitch 0.4 → 12.5 Voxel je realem Meter: LID_MIN_CLEARANCE_M = 12 Voxel Luft, ein Deckel braucht
+# mindestens 1875 Spalten, ROOF_ZONE_MIN_HEIGHT_MM = 12.5 Voxel. Geschosse: EG bei Welt-Z 0, OG bei 8.0 (Schicht 20).
+
+_STOREYS = [("EG", 0.0), ("OG", 8.0)]
 
 
-def test_roof_becomes_own_part_and_is_not_cut():
-    m = np.zeros((10, 10, 30), dtype=bool)
-    m[:, :, 0:2] = m[:, :, 14:16] = True                # Böden EG, OG
-    m[0, :, :] = m[-1, :, :] = True                     # Wände bis oben
-    roof = np.full(m.shape, -1, dtype=np.int8)
-    roof[:, :, 26:30] = 0
-    m[:, :, 26:30] = True
-    voxel_grid = VoxelGrid(m, np.zeros(3), 0.4)
-    t = partitioning.partition_grid(voxel_grid, [("EG", 0.0), ("OG", 5.6)], 200, roof=roof, roof_names=["Dach OG"])
+def _box(x: tuple[int, int], y: tuple[int, int], z: tuple[int, int]) -> tuple[slice, slice, slice]:
+    """Quader als Schnitt [von, bis) je Achse."""
+    return slice(*x), slice(*y), slice(*z)
+
+
+class _Scene:
+    """Voxelgitter von Hand: ``add`` setzt ein Bauteil (wie core/voxels/shell._combine: wer später kommt,
+    überschreibt – waagrechte Platten und Dächer gehören ans Ende)."""
+
+    def __init__(self, shape: tuple[int, int, int]):
+        self.matrix = np.zeros(shape, dtype=bool)
+        self.owner = np.full(shape, -1, dtype=np.int16)
+        self.owners: list[Owner] = []
+
+    def add(self, region, *, storey="EG", roof=None, horizontal=False) -> np.ndarray:
+        """``region``: Quader (``_box``) oder Bool-Gitter. Rückgabe: Maske der Voxel des Bauteils."""
+        mask = region
+        if isinstance(region, tuple):
+            mask = np.zeros(self.matrix.shape, dtype=bool)
+            mask[region] = True
+        self.owners.append(Owner(f"g{len(self.owners)}", storey, roof, horizontal))
+        self.matrix |= mask
+        self.owner[mask] = len(self.owners) - 1
+        return mask
+
+    def grid(self, plans: dict[str, tuple[slice, slice]] | None = None) -> VoxelGrid:
+        floor_plans = {}
+        for name, (i, j) in (plans or {}).items():
+            floor_plans[name] = np.zeros(self.matrix.shape[:2], dtype=bool)
+            floor_plans[name][i, j] = True
+        return VoxelGrid(self.matrix, np.zeros(3), 0.4, floor_plans=floor_plans, owner=self.owner, owners=self.owners)
+
+
+def _partition(scene: _Scene, plans=None) -> partitioning.Partition:
+    voxel_grid = scene.grid(plans)
+    return partitioning.partition_grid(voxel_grid, _STOREYS, 200, floor_plans=voxel_grid.floor_plans or None)
+
+
+def _above(mask: np.ndarray, k: int) -> np.ndarray:
+    """``mask`` eingeschränkt auf die Schichten ab ``k``."""
+    return mask & (np.arange(mask.shape[2]) >= k)[None, None, :]
+
+
+def _box_house() -> _Scene:
+    """EG und OG über 45 × 45 Spalten mit Bodenplatte (Schichten 0–1) und Aussenwänden (Schichten 2–39), die
+    durch beide Geschosse laufen. Decken und Dach kommen in den Tests dazu."""
+    s = _Scene((50, 50, 60))
+    for x, y in (((0, 45), (0, 1)), ((0, 45), (44, 45)), ((0, 1), (1, 44)), ((44, 45), (1, 44))):
+        s.add(_box(x, y, (2, 40)))
+    s.add(_box((0, 45), (0, 45), (0, 2)), horizontal=True)
+    return s
+
+
+def test_slab_at_the_joint_goes_entirely_to_the_upper_part_even_if_its_underside_dips():
+    s = _box_house()
+    slab = np.zeros(s.matrix.shape, dtype=bool)
+    slab[0:45, 0:45, 20:23] = True                                                     # Decke an der Fuge (Schicht 20)
+    slab[10:20, 10:20, 19] = True                                                      # Unterseite stellenweise 1 tiefer
+    s.add(slab, storey="OG", horizontal=True)
+    t = _partition(s)
+    assert t.names == ["EG", "OG"]
+    assert (t.labels[slab & (np.arange(60) >= 20)[None, None, :]] == 1).all()          # ganz oben, nichts am EG
+    assert (t.labels[10:20, 10:20, 19] == -1).all() and not s.matrix[10:20, 10:20, 19].any()   # Absatz abgeschnitten
+    assert (t.labels[0:45, 0:45, 0:2] == 0).all()                                      # Bodenplatte bleibt unten
+    assert (t.labels[1:44, 1:44, 2:19] == -1).all()                                    # Raum bleibt leer
+
+
+def test_wall_head_below_a_thinner_slab_stays_with_the_lower_storey():
+    s = _box_house()
+    s.add(_box((30, 31), (5, 40), (2, 40)))                                            # Innenwand durch die Fuge
+    slab = np.zeros(s.matrix.shape, dtype=bool)
+    slab[0:45, 0:45, 20:24] = True
+    slab[30, 5:40, 20:22] = False                                                      # an der Wand beginnt die Decke erst bei 22
+    s.add(slab, storey="OG", horizontal=True)
+    t = _partition(s)
+    assert (t.labels[30, 5:40, 20:22] == 0).all()                                      # Wandkopf: unten (Schnitt je Spalte)
+    assert (t.labels[30, 5:40, 22:24] == 1).all()                                      # die Decke darüber: oben
+    assert (t.labels[30, 5:40, 24:40] == 1).all()                                      # Wand über der Decke: oben
+    assert (t.labels[30, 5:40, 2:20] == 0).all()                                       # Wand unter der Fuge: unten
+    assert (t.labels[10, 5:40, 20:24] == 1).all()                                      # Decke daneben: ganz oben
+
+
+def test_sloped_slab_crossing_the_joint_stays_whole():
+    s = _Scene((60, 50, 60))
+    s.add(_box((0, 1), (0, 45), (2, 20)))                                              # eine Wand darunter
+    s.add(_box((0, 26), (0, 45), (20, 23)), storey="OG", horizontal=True)              # ebene Decke: bestimmt die Fuge
+    sloped = np.zeros(s.matrix.shape, dtype=bool)
+    for i in range(26, 50):                                                            # steigt von Schicht 19 auf 23
+        bottom = 19 + (i - 26) // 5
+        sloped[i, 0:45, bottom:bottom + 3] = True
+    s.add(sloped, storey="OG", horizontal=True)
+    t = _partition(s)
+    assert t.names == ["EG", "OG"]
+    assert not (t.labels[sloped] == 0).any()                                           # nirgends am unteren Teil
+    assert (t.labels[_above(sloped, 20)] == 1).all()
+    assert (t.labels[26:30, 0:45, 19] == -1).all()                                     # nur der Absatz unter der Fuge entfällt
+
+
+def _l_house() -> _Scene:
+    """EG über x 0–69, OG nur über x 0–24. Rechts (x 25–69) liegt noch nichts über den Wänden des EG: Die Tests
+    legen dort eine Terrasse auf die Schichten 15–16 (5 Schichten tiefer als die Decke unter dem OG, 20–22)."""
+    s = _Scene((70, 56, 60))
+    s.add(_box((0, 70), (0, 1), (2, 15)))                                              # Wände EG ringsum
+    s.add(_box((0, 70), (55, 56), (2, 15)))
+    s.add(_box((69, 70), (1, 55), (2, 15)))
+    s.add(_box((24, 25), (1, 55), (2, 20)))
+    s.add(_box((0, 70), (0, 56), (0, 2)), horizontal=True)                             # Bodenplatte
+    s.add(_box((0, 25), (0, 56), (20, 23)), storey="OG", horizontal=True)              # Decke unter dem OG
+    return s
+
+
+_L_PLANS = {"EG": (slice(0, 70), slice(0, 56)), "OG": (slice(0, 25), slice(0, 56))}
+
+
+def test_lower_slab_over_rooms_becomes_a_lid_part():
+    s = _l_house()
+    lid = s.add(_box((25, 70), (0, 56), (15, 17)), horizontal=True)                    # Terrasse über den Räumen
+    t = _partition(s, _L_PLANS)
+    assert t.names == ["EG", "OG", "Decke EG"]
+    assert (t.labels[lid] == 2).all()
+    assert (t.labels[69, 1:55, 2:15] == 0).all()                                       # Wand darunter bleibt beim EG
+    assert (t.labels[0:25, 0:56, 20:23] == 1).all()                                    # Decke unter dem OG: OG
+    parts = partitioning.mesh_pieces(s.grid(_L_PLANS), t)
+    assert set(parts) == {"EG", "OG", "Decke EG"} and parts["Decke EG"].is_watertight
+
+
+def test_flat_roof_slab_over_rooms_of_the_top_storey_is_named_roof():
+    s = _box_house()
+    s.add(_box((0, 45), (0, 45), (20, 23)), storey="OG", horizontal=True)
+    roof = s.add(_box((0, 45), (0, 45), (38, 40)), storey="OG", horizontal=True)       # Flachdach ohne Dachbauteil
+    t = _partition(s)
     assert t.names == ["EG", "OG", "Dach OG"]
-    assert (t.labels[:, :, 26:30] == 2).all()
-    parts = partitioning.mesh_pieces(voxel_grid, t)
+    assert (t.labels[roof] == 2).all()
+    assert (t.labels[0:45, 0:45, 20:23] == 1).all()                                    # die Decke an der Fuge ist KEIN Dach
+
+
+def test_slab_at_the_joint_is_no_lid():
+    """Auch gross und über Wänden des unteren Teils: Die Decke an der Fuge ist der Boden des oberen Teils."""
+    s = _box_house()
+    s.add(_box((0, 45), (0, 45), (20, 23)), storey="OG", horizontal=True)
+    t = _partition(s)
+    assert t.names == ["EG", "OG"] and (t.labels[0:45, 0:45, 20:23] == 1).all()
+
+
+def test_covering_on_a_lid_goes_with_the_lid():
+    s = _l_house()
+    s.add(_box((25, 70), (0, 56), (15, 17)), horizontal=True)                          # Terrasse
+    covering = s.add(_box((30, 60), (10, 40), (17, 18)), horizontal=True)              # Belag, liegt direkt auf
+    t = _partition(s, _L_PLANS)
+    assert t.names == ["EG", "OG", "Decke EG"]
+    assert (t.labels[covering] == 2).all()
+
+
+def test_covering_with_a_small_air_gap_goes_with_the_lid():
+    s = _l_house()
+    s.add(_box((25, 70), (0, 56), (15, 17)), horizontal=True)
+    covering = s.add(_box((30, 60), (10, 40), (19, 20)), horizontal=True)             # 2 Schichten Luft darunter
+    t = _partition(s, _L_PLANS)
+    assert t.names == ["EG", "OG", "Decke EG"]
+    assert (t.labels[covering] == 2).all()
+
+
+def test_insulation_just_below_the_slab_of_the_storey_above_goes_with_that_storey():
+    s = _box_house()
+    insulation = s.add(_box((2, 43), (2, 43), (17, 19)), horizontal=True)             # 1 Schicht Luft unter der Decke
+    s.add(_box((0, 45), (0, 45), (20, 23)), storey="OG", horizontal=True)
+    t = _partition(s)
+    assert t.names == ["EG", "OG"]
+    assert (t.labels[insulation] == 1).all()                                           # oberes Teil, nicht EG
+
+
+def _roof_scene(roof_height: int) -> tuple[_Scene, np.ndarray]:
+    s = _box_house()
+    s.add(_box((0, 45), (0, 45), (20, 23)), storey="OG", horizontal=True)
+    roof = s.add(_box((10, 30), (10, 30), (40, 40 + roof_height)), storey="OG", roof="Dach OG")
+    return s, roof
+
+
+def test_small_roof_becomes_its_own_part_and_is_not_cut():
+    s, roof = _roof_scene(roof_height=14)                                              # 5600 Voxel: weit unter 1 % des Modells
+    t = _partition(s)
+    assert t.names == ["EG", "OG", "Dach OG"]
+    assert (t.labels[roof] == 2).all()
+    parts = partitioning.mesh_pieces(s.grid(), t)
     assert list(parts) == ["EG", "OG", "Dach OG"] and all(x.is_watertight for x in parts.values())
+
+
+def test_roof_is_one_part_per_connected_piece():
+    s, roof = _roof_scene(roof_height=14)
+    second = s.add(_box((10, 30), (33, 43), (40, 54)), storey="OG", roof="Dach OG")   # 2800 Voxel, getrennt vom ersten
+    t = _partition(s)
+    assert t.names == ["EG", "OG", "Dach OG", "Dach OG"]
+    assert (t.labels[roof] == 2).all() and (t.labels[second] == 3).all()
+    assert list(partitioning.mesh_pieces(s.grid(), t)) == ["EG", "OG", "Dach OG", "Dach OG #2"]
+
+
+def test_low_roof_is_treated_like_a_slab():
+    s, roof = _roof_scene(roof_height=6)                                               # 6 Schichten = 0.5 m: keine Dachschale
+    t = _partition(s)
+    assert "Dach OG" not in t.names
+    assert (t.labels[roof] == 1).all()                                                 # wie eine Decke: ans Geschoss
+
+
+# --- Abgetrennte Stücke und Kleinteile (cleanup) ------------------------------------
+
+def test_piece_on_the_roof_goes_to_the_roof():
+    labels = np.full((20, 20, 30), -1, dtype=np.int16)
+    labels[:, :, :10] = 0                               # Geschoss
+    labels[:, :, 10:14] = 2                             # Dach darüber
+    labels[5:7, 5:7, 14:17] = 0                         # Brüstung (Label 0) steht auf dem Dach, hängt nicht am Hauptstück
+    assert assign_by_support(labels) == (1, 0)
+    assert (labels[5:7, 5:7, 14:17] == 2).all() and (labels[:, :, :10] == 0).all()
+
+
+def test_piece_without_support_goes_to_the_part_it_touches_sideways():
+    labels = np.full((20, 20, 30), -1, dtype=np.int16)
+    labels[0:10, :, 0:10] = 0
+    labels[10:20, :, 0:20] = 1                          # Nachbarteil, höher
+    labels[8:10, 5:7, 12:14] = 0                        # Stück von 0 schwebt neben 1: unten Luft, seitlich Teil 1
+    assert assign_by_support(labels) == (1, 0)
+    assert (labels[8:10, 5:7, 12:14] == 1).all()
+
+
+def test_part_above_the_piece_is_no_support():
+    labels = np.full((20, 20, 30), -1, dtype=np.int16)
+    labels[0:5, :, 0:5] = 0                             # Hauptstück von 0, weit weg
+    labels[10:20, :, 10:20] = 1                         # Teil 1 liegt auf dem Stück:
+    labels[12:14, 5:7, 8:10] = 0                        # das Stück hängt darunter, Teil 1 trägt es nicht
+    assert assign_by_support(labels) == (0, 2 * 2 * 2)
+    assert (labels[12:14, 5:7, 8:10] == -1).all() and (labels[10:20, :, 10:20] == 1).all()
+
+
+def test_sliver_without_contact_is_deleted():
+    labels = np.full((20, 20, 20), -1, dtype=np.int16)
+    labels[0:10] = 0
+    labels[10:20] = 1
+    labels[17:20, 17:20, 17:20] = -1
+    labels[18, 18, 18] = 1                              # loser Splitter von 1 ohne jeden Kontakt
+    assert assign_by_support(labels) == (0, 1)
+    assert labels[18, 18, 18] == -1 and (labels[10:17] == 1).all()
+
+
+def test_main_piece_stays_even_if_it_is_not_the_lowest():
+    labels = np.full((20, 20, 30), -1, dtype=np.int16)
+    labels[:, :, :10] = 0
+    labels[:, :, 10:20] = 1                             # zusammenhängend: kein abgetrenntes Stück
+    before = labels.copy()
+    assert assign_by_support(labels) == (0, 0) and (labels == before).all()
 
 
 def test_tiny_part_goes_to_the_neighbor_part():
@@ -182,7 +424,7 @@ def test_dissolved_part_appears_as_warning():
     labels[:, :, :10] = 0
     labels[:, :, 10:19] = 1
     labels[5, 5, 19] = 2
-    warnings = assign_with_message(labels, ["EG", "OG", "Technik"], 3, 2, 0.4)
+    warnings = assign_with_message(labels, ["EG", "OG", "Technik"], 3, 0.4)
     assert any("«Technik»" in w and "angehängt" in w for w in warnings)
 
 
@@ -229,129 +471,73 @@ def test_mesh_pieces_without_specks_and_unique():
     assert parts["EG #2"].volume == pytest.approx(8 * 8 * 4 * 0.4 ** 3, rel=0.05)
 
 
-def test_hanging_steps_go_to_the_neighbor_part():
-    """Ein Block unter der Unterseite des oberen Teils (Treppenende in der Deckenöffnung) hebt es nicht vom Bett."""
-    from core.parts.cleanup import assign_hanging
-    labels = np.full((20, 20, 30), -1, dtype=np.int16)
+def test_roofs_and_lids_are_not_dissolved_as_small_parts():
+    labels = np.full((20, 20, 20), -1, dtype=np.int16)
     labels[:, :, :10] = 0
-    labels[:, :, 10:20] = 1                 # oberes Teil, Unterseite bei k = 10
-    labels[:, :, 6:10][5:8, 5:8] = 1        # Block ragt 4 Schichten unter die Unterseite, seitlich liegt Teil 0
-    assert assign_hanging(labels, 2, 6) == 3 * 3 * 4
-    assert (labels[5:8, 5:8, 6:10] == 0).all() and (labels[:, :, 10:20] == 1).all()
+    labels[:, :, 10:18] = 1
+    labels[5, 5, 18] = 2                                # kleines Dach (Teil 2 ≥ Anzahl der Geschosse) auf dem OG
+    assert assign_small_pieces(labels, count=2) == 0
+    assert labels[5, 5, 18] == 2
+    assert assign_small_pieces(labels) == 1             # ohne Anzahl gälte es als Kleinteil
+    assert labels[5, 5, 18] == 1
 
 
-def test_hanging_steps_without_neighbor_are_trimmed():
-    from core.parts.cleanup import assign_hanging
-    labels = np.full((20, 20, 30), -1, dtype=np.int16)
-    labels[:, :, 10:20] = 1
-    labels[:, :, 6:10][5:8, 5:8] = 1        # schwebt unter dem Teil, ringsum Luft
-    assert assign_hanging(labels, 2, 6) == 3 * 3 * 4
-    assert (labels[:, :, :10] == -1).all()
+def test_small_storey_part_is_still_dissolved_next_to_a_roof():
+    labels = np.full((20, 20, 20), -1, dtype=np.int16)
+    labels[:, :, :10] = 0
+    labels[:, :, 10:18] = 2                             # Dach
+    labels[5, 5, 18] = 1                                # Geschoss 1 besteht nur aus einem Voxel
+    assert assign_small_pieces(labels, count=2) == 1
+    assert labels[5, 5, 18] == 2
 
 
-def test_slab_underside_below_wall_of_upper_storey_is_trimmed():
-    """NEST 1:100: Wand oben steht auf einer Decke, deren Unterseite 1 Schicht unter der Fuge liegt.
-    Ohne Wand darunter blieb diese Schicht als dünner Streifen oben auf dem unteren Teil."""
-    m = np.zeros((20, 6, 30), dtype=bool)
-    m[:, :, 10:12] = True                               # Decke des oberen Geschosses
-    m[:, :, 9] = True                                   # Unterseite 1 Schicht unter der Fuge (k = 10)
-    m[8:10, :, 12:30] = True                            # Wand des oberen Geschosses → Vollabschnitt > platte
-    m[0, :, :9] = True                                  # Wand des unteren Geschosses (am Rand)
-    smooth_joint(m, 10, np.ones((20, 6), dtype=bool), leveling=2, plate=5, width=0)
-    assert not m[8:10, :, 9].any()                      # unter der oberen Wand: kein Streifen mehr
-    assert m[0, :, 8].all()                             # untere Wand bleibt
+def test_small_roof_survives_assign_with_message():
+    labels = np.full((20, 20, 20), -1, dtype=np.int16)
+    labels[:, :, :10] = 0
+    labels[:, :, 10:18] = 1
+    labels[5, 5, 18:20] = 2
+    warnings = assign_with_message(labels, ["EG", "OG", "Dach OG"], 2, 0.4)
+    assert (labels[5, 5, 18:20] == 2).all() and not any("Dach OG" in w for w in warnings)
 
 
-def _house(lower_ceiling: int = 20) -> tuple[VoxelGrid, dict[str, np.ndarray]]:
-    """EG über die ganze Länge (x 0–29), OG nur links (x 0–14); Pitch 0.4, 1:200 (Geschoss 20 Schichten = 4 m).
+# --- Splitter im Gitter, eindeutige Teile (Analysebericht B-04, B-11, B-16) ----------
 
-    ``lower_ceiling``: Unterseite der EG-Decke rechts (x 16–29); 20 = bündig mit der Decke unter dem OG.
-    """
-    m = np.zeros((30, 20, 44), dtype=bool)
-    m[:, :, 0:2] = True                                     # Bodenplatte EG
-    m[[0, 15, 29], :, 2:20] = True                          # Wände EG (x = 15 trägt beide Decken)
-    m[:, [0, 19], 2:20] = True
-    m[0:16, :, 20:22] = True                                # Decke unter dem OG
-    m[16:30, :, lower_ceiling:lower_ceiling + 2] = True     # Decke rechts
-    m[[29], :, lower_ceiling:20] = True                     # Wand rechts bis unter die tiefere Decke
-    m[[0, 14], :, 22:42] = m[0:15, [0, 19], 22:42] = True   # Wände OG
-    m[0:15, :, 42:44] = True                                # Dach OG (flach)
-    plans = {"EG": np.ones((30, 20), dtype=bool), "OG": np.zeros((30, 20), dtype=bool)}
-    plans["OG"][0:15] = True
-    return VoxelGrid(m, np.zeros(3), 0.4), plans
+def test_without_slivers_removes_specks_and_fills_small_cavities():
+    m = np.zeros((12, 12, 12), dtype=bool)
+    m[2:8, 2:8, 2:8] = True
+    m[4, 4, 4] = False                       # Hohlraum aus 1 Voxel
+    m[8, 8, 8] = True                        # Krume, nur über eine Ecke verbunden
+    m[10:12, 0:2, 0:3] = True                # loses Stück mit 12 Voxeln bleibt
+    r, filled, kept = without_sliver(m, 8)
+    assert not r[8, 8, 8] and r[4, 4, 4] and r[10:12, 0:2, 0:3].all()
+    assert r.sum() == 6 ** 3 + 12
+    assert filled == kept == []                  # der 1-Voxel-Hohlraum ist ein Vernetzungsrest, keine Meldung
+    assert without_sliver(m, 1)[0] is m          # grobe Voxel: nichts zu tun
 
 
-def test_flush_slab_beyond_the_upper_floor_plan_goes_up():
-    voxel_grid, plans = _house()
-    t = partitioning.partition_grid(voxel_grid, [("EG", 0.0), ("OG", 8.0)], 200, floor_plans=plans)
-    assert t.names == ["EG", "OG"]
-    assert (t.labels[16:30, :, 20:22] == 1).all()          # Decke rechts gehört zum OG: das EG bleibt oben offen
-    assert (t.labels[29, :, 2:20] == 0).all()              # die Wand darunter bleibt beim EG
+def test_closed_cavities_up_to_the_limit_are_filled():
+    m = np.zeros((20, 20, 20), dtype=bool)
+    m[1:19, 1:19, 1:19] = True
+    m[3:6, 3:6, 3:6] = False                     # Schacht 27 Voxel
+    m[8:16, 8:16, 8:16] = False                  # grosser Hohlraum 512 Voxel
+    r, filled, kept = without_sliver(m, 8, max_cavity=100)
+    assert r[3:6, 3:6, 3:6].all() and not r[8:16, 8:16, 8:16].any()
+    assert filled == [27] and kept == [512]
+    open_box = m.copy()
+    open_box[3:6, 3:6, 0:3] = False              # nach unten offen: kein geschlossener Hohlraum
+    r, filled, _ = without_sliver(open_box, 8, max_cavity=100)
+    assert filled == [] and not r[3:6, 3:6, 3:6].any()
 
 
-def test_flush_slabs_ignore_walls_running_through_the_joint():
-    m = np.zeros((20, 10, 30), dtype=bool)
-    m[0:12, :, 10:12] = True                               # Decke, bündig an der Fuge 10
-    m[12, :, :] = True                                     # hohe Wand eines Flügels durch die Fuge
-    columns = np.zeros((20, 10), dtype=bool)
-    columns[0:5] = True
-    grown = flush_slabs(m, 10, columns, leveling=1, plate=12)
-    assert grown[0:12].all() and not grown[12:].any()
-
-
-def test_deep_ceiling_over_rooms_becomes_own_part():
-    voxel_grid, plans = _house(lower_ceiling=15)           # rechts 5 Schichten (1 m) tiefer: Deckel über dem EG
-    t = partitioning.partition_grid(voxel_grid, [("EG", 0.0), ("OG", 8.0)], 200, floor_plans=plans)
-    assert t.names == ["EG", "OG", "Decke EG"]
-    assert (t.labels[16:29, 1:19, 15:17] == 2).all()       # die tiefere Decke ist ein eigenes Teil
-    assert (t.labels[29, 1:19, 2:15] == 0).all()           # die Wand darunter bleibt beim EG
-    parts = partitioning.mesh_pieces(voxel_grid, t)
-    assert set(parts) == {"EG", "OG", "Decke EG"} and parts["Decke EG"].is_watertight
-
-
-def _slab_over_storey(thickness: int = 4) -> tuple[np.ndarray, np.ndarray]:
-    """Labels und Gitter: unten Teil 0 (Schichten 0–4), darüber die Decke von Teil 1 ab der Fuge 5."""
-    labels = np.full((20, 20, 12), -1, dtype=np.int16)
-    labels[:, :, :5] = 0
-    labels[:, :, 5:5 + thickness] = 1
-    return labels, labels >= 0
-
-
-def _flatten(labels: np.ndarray, m: np.ndarray) -> dict:
-    return flat_undersides(labels, m, [(1, 5, np.ones((20, 20), dtype=bool))], depth=4, radius=2)
-
-
-def test_narrow_recess_in_the_underside_is_filled():
-    labels, m = _slab_over_storey()
-    labels[5:15, 8:10, 5:7] = -1                            # Storenkasten-Rinne: 2 Voxel breit, 2 tief
-    m[5:15, 8:10, 5:7] = False
-    assert _flatten(labels, m) == {1: (1, 40)}
-    assert (labels[:, :, 5:9] == 1).all() and m[:, :, 5:9].all()
-
-
-def test_wide_or_deep_recesses_stay_open():
-    labels, m = _slab_over_storey(thickness=6)
-    labels[2:10, 2:10, 5:7] = -1                            # breit (Treppenauge, Deckenversatz)
-    labels[12:18, 15:17, 5:10] = -1                         # schmal, aber tiefer als depth
-    before = labels.copy()
-    assert _flatten(labels, labels >= 0) == {}
-    assert (labels == before).all()
-
-
-def test_roof_voxels_in_a_recess_stay_with_the_roof():
-    labels, m = _slab_over_storey()
-    labels[5:15, 8:10, 5] = 2                               # Dachvoxel in der Rinne
-    labels[5:15, 8:10, 6] = -1
-    before = labels.copy()
-    assert _flatten(labels, labels >= 0) == {}
-    assert (labels == before).all()
-
-
-def test_partition_flattens_the_underside_and_reports_it():
-    m = np.zeros((30, 30, 30), dtype=bool)
-    m[0], m[-1], m[:, 0], m[:, -1] = (True,) * 4             # Aussenwände über beide Geschosse
-    m[:, :, :2] = m[:, :, 12:16] = True                     # Bodenplatte, Decke ab Fuge 12
-    m[10:20, 14:16, 12:14] = False                          # Rinne 2 Voxel breit, 2 tief (tiefer als JOINT_LEVELING_MM)
-    t = partitioning.partition_grid(VoxelGrid(m, np.zeros(3), 0.4), [("EG", 0.0), ("OG", 4.8)], 200)
-    assert (t.labels[1:-1, 1:-1, 12] == 1).all()
-    assert any("Unterseite eben" in w for w in t.warnings)
+def test_mesh_pieces_without_specks_and_unique():
+    m = np.zeros((10, 10, 12), dtype=bool)
+    m[1:9, 1:9, 1:5] = m[1:9, 1:9, 6:10] = True
+    m[0, 0, 11] = True                                       # Einzelvoxel (0.064 mm³ < 0.5 mm³)
+    labels = np.where(m, 0, -1).astype(np.int16)
+    labels[:, :, 6:] = np.where(m[:, :, 6:], 1, -1)
+    labels[0, 0, 11] = 1
+    partition = partitioning.Partition(labels, ["EG", "EG"], [])
+    parts = partitioning.mesh_pieces(VoxelGrid(m, np.zeros(3), 0.4), partition)
+    assert list(parts) == ["EG", "EG #2"]
+    assert all(t.is_watertight and t.body_count == 1 for t in parts.values())
+    assert parts["EG #2"].volume == pytest.approx(8 * 8 * 4 * 0.4 ** 3, rel=0.05)

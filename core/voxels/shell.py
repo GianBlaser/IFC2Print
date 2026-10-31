@@ -9,13 +9,15 @@ Speicher überläuft (``check_grid``). Die Einzelschritte stehen in eigenen Modu
   * core/voxels/grid.py       ``VoxelGrid`` und ``BuildingElement``
   * core/voxels/meshing.py          Marching Cubes, Glättung, Dezimierung
 
-Danach werden alle Bauteile in ein gemeinsames Gitter geodert. 1-Voxel-Spalten
-(z.B. zwischen einer gerasteten Wand und ihrem Anschluss) werden geschlossen.
+Danach werden alle Bauteile in ein gemeinsames Gitter geodert; je Voxel bleibt gespeichert, welchem
+Bauteil er gehört (``owner``) – die Aufteilung in Geschoss- und Dachteile (core/parts/) braucht das, um
+Decken und Dächer als Ganzes einem Teil zu geben. 1-Voxel-Spalten (z.B. zwischen einer gerasteten Wand
+und ihrem Anschluss) werden geschlossen.
 Fenster und Türen wirken erst auf dieses gemeinsame Gitter (VoxelGrid.place,
 siehe core/openings/windows.py).
 
 Eingabe: Liste von ``BuildingElement`` (Modellmass [mm]), Pitch und Massstab
-Ausgabe: ``VoxelGrid`` mit Grundrissen, Dach-Labels und Warnungen
+Ausgabe: ``VoxelGrid`` mit Grundrissen, Bauteil je Voxel und Warnungen
 """
 
 from collections.abc import Callable
@@ -76,27 +78,32 @@ def _voxelize_each(building_elements: list[BuildingElement], pitch_mm: float, ma
 
 
 def _combine(parts: list[_ElementVoxels], pitch_mm: float, warnings: list[str]) -> VoxelGrid:
-    """Odert die Bauteil-Voxel in ein Gesamtgitter und führt Grundrisse je Geschoss und Dach-Labels mit."""
+    """Odert die Bauteil-Voxel in ein Gesamtgitter und führt Grundrisse je Geschoss und das Bauteil je Voxel mit.
+
+    Waagrechte Platten und Dächer werden zuletzt geschrieben: Wo eine Wand durch eine Decke läuft, gehört der
+    Voxel der Decke – so bleibt der Boden eines Geschossteils vollständig.
+    """
     lo_overall = np.min([p.lo for p in parts], axis=0)
     hi_overall = np.max([p.lo + p.voxels.shape for p in parts], axis=0)
     check_grid(tuple(int(n) for n in hi_overall - lo_overall), pitch_mm)
     matrix = np.zeros(tuple(hi_overall - lo_overall), dtype=bool)
-    roof_names = sorted({p.element.roof for p in parts if p.element.roof})
-    roof = np.full(matrix.shape, -1, dtype=np.int8) if roof_names else None
+    dtype = np.int16 if len(parts) < np.iinfo(np.int16).max else np.int32
+    owner = np.full(matrix.shape, -1, dtype=dtype)
     floor_plans: dict[str, np.ndarray] = {}
-    for voxels, lo, building_element in parts:
+    order = sorted(range(len(parts)), key=lambda i: (parts[i].element.horizontal, parts[i].element.roof is not None))
+    for index in order:
+        voxels, lo, building_element = parts[index]
         a = lo - lo_overall
         b = a + voxels.shape
         target = (slice(a[0], b[0]), slice(a[1], b[1]), slice(a[2], b[2]))
         matrix[target] |= voxels
-        if building_element.roof:
-            roof[target][voxels] = roof_names.index(building_element.roof)
-        elif building_element.storey:
+        owner[target][voxels] = index
+        if not building_element.roof and building_element.storey:
             floor_plan = floor_plans.setdefault(building_element.storey, np.zeros(matrix.shape[:2], dtype=bool))
             floor_plan[target[:2]] |= voxels.any(axis=2)
     floor_plans = {name: binary_fill_holes(g) for name, g in floor_plans.items()}   # Räume einschliessen
-    return VoxelGrid(close_gaps(matrix), lo_overall * pitch_mm, pitch_mm,
-                       floor_plans=floor_plans, roof=roof, roof_names=roof_names, warnings=warnings)
+    return VoxelGrid(close_gaps(matrix), lo_overall * pitch_mm, pitch_mm, floor_plans=floor_plans,
+                     owner=owner, owners=[p.element.owner for p in parts], warnings=warnings)
 
 
 def close_gaps(matrix: np.ndarray) -> np.ndarray:

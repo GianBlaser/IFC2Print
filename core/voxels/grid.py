@@ -23,14 +23,16 @@ class VoxelGrid:
     """Bool-Matrix; Voxel [i, j, k] hat das Zentrum origin + (i, j, k) · pitch (Modell-mm).
 
     Für die Aufteilung (core/parts/partitioning.py): ``floor_plans`` je Geschoss (2D-Maske der Spalten
-    seiner Bauteile, Räume eingeschlossen) und ``roof`` (Index in ``roof_names`` je Voxel, −1 = kein Dach).
+    seiner Bauteile, Räume eingeschlossen) und ``owner`` (Index in ``owners`` je Voxel, −1 = kein Bauteil:
+    geschlossene Spalten, Füllkörper von Öffnungen, Geländerbänder). Wo sich Bauteile überlappen, gehört der
+    Voxel dem zuletzt geschriebenen (waagrechte Platten und Dächer zuletzt, core/voxels/shell.py).
     """
     matrix: np.ndarray
     origin: np.ndarray
     pitch: float
     floor_plans: dict[str, np.ndarray] = field(default_factory=dict, repr=False)
-    roof: np.ndarray | None = field(default=None, repr=False)
-    roof_names: list[str] = field(default_factory=list)
+    owner: np.ndarray | None = field(default=None, repr=False)
+    owners: list["Owner"] = field(default_factory=list, repr=False)
     warnings: list[str] = field(default_factory=list)         # übersprungene Bauteile (mit GUID)
     # Feldwerte feiner als ein Voxel (flache Laibungen): je Aufruf von place_level (Gitterindizes N×3, Werte N)
     levels: list[tuple[np.ndarray, np.ndarray]] = field(default_factory=list, repr=False)
@@ -115,6 +117,15 @@ class VoxelGrid:
         return int((self.matrix[target] & mask).sum())
 
 
+@dataclass(frozen=True)
+class Owner:
+    """Was die Aufteilung (core/parts/) über das Bauteil eines Voxels wissen muss."""
+    guid: str
+    storey: str                               # IFC-Geschoss
+    roof: str | None                          # Name des Dachteils, falls Dachbauteil
+    horizontal: bool                          # waagrechte Platte (Decke, Dach, Belag): geht als Ganzes an ein Teil
+
+
 @dataclass
 class BuildingElement:
     """Ein zu druckendes Bauteil im Modellmass [mm]."""
@@ -123,5 +134,10 @@ class BuildingElement:
     storey: str = ""                        # IFC-Geschoss (Grundriss für die Fugen)
     roof: str | None = None                   # Name des Dachteils, falls Dachbauteil
     flatten: bool = False                       # Gefälle ausgleichen (Spalten tiefste bis höchste Schicht füllen)
+    horizontal: bool = False                  # waagrechte Platte: wird bei der Aufteilung nie zerschnitten
     guid: str = ""                            # für Warnungen, falls das Bauteil nicht voxelisierbar ist
     voids: list[trimesh.Trimesh] = field(default_factory=list)   # Öffnungen ohne Füller (nur aus diesem Bauteil)
+
+    @property
+    def owner(self) -> Owner:
+        return Owner(self.guid, self.storey, self.roof, self.horizontal)

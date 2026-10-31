@@ -58,9 +58,11 @@ def prepare_elements(ifc: IfcModel, df: pd.DataFrame, *, scale: int, rot_matrix:
     zones = roof_zones(ifc, [z for z, _ in printed], elevations)
     elements = []
     for z, mesh in printed:
+        p = ifc.plates.get(z.guid)
         features = dict(storey=z.storey, roof=roof_name(ifc, z, elevations, zones), flatten=z.guid in ifc.slope,
+                        horizontal=p is not None and not is_wall(p.normal_vector),
                         guid=z.guid, voids=_voids(ifc, z.guid, scale, rot_matrix, scaled.matrix_of.get(z.guid)))
-        elements.append(_element(z, mesh, features, z.guid in scaled.package_of, min_wall_mm, pitch_mm))
+        elements.append(_element(z, mesh, features, z.guid in scaled.package_of, min_wall_mm, wall_mm, pitch_mm))
     if not elements:
         raise ValueError("Keine druckbaren Bauteile mit Geometrie – Regeln prüfen.")
     return PreparedElements(elements, railing, scaled, mode_per_guid, elevations, zones)
@@ -118,14 +120,22 @@ def _voids(ifc: IfcModel, guid: str, scale: int, rot_matrix: np.ndarray,
     return voids if package_matrix is None else [o.apply_transform(package_matrix) for o in voids]
 
 
-def _element(z: tuple, mesh: trimesh.Trimesh, features: dict, in_package: bool, min_wall_mm: float,
+def _element(z: tuple, mesh: trimesh.Trimesh, features: dict, in_package: bool, min_wall_mm: float, wall_mm: float,
              pitch_mm: float) -> BuildingElement:
-    """Ein Bauteil je nach Aktion: «fuellen» als Quader, «verdicken» allseitig aufgedickt, sonst so, wie es ist."""
+    """Ein Bauteil je nach Aktion: «fuellen» als Quader, «verdicken» allseitig aufgedickt, sonst so, wie es ist.
+
+    Wände ausserhalb eines Pakets (gekrümmt, L-förmig – keine gerade Platte) werden auch bei «behalten» bei Bedarf
+    allseitig auf die Mindestdicke der Wände aufgedickt: Die Regel verspricht, dass dünnere Wände die Mindestdicke erreichen.
+    """
     if z.action == "fuellen":
         return BuildingElement(fill_box(*mesh.bounds, min_wall_mm), **{**features, "voids": []})
-    if z.action == "verdicken" and not in_package:   # Stützen, Träger u.ä.: bei Bedarf allseitig auf die Mindestwand aufdicken
+    if in_package:                                   # Pakete sind schon auf ganze Voxel und die Mindestdicke skaliert
+        return BuildingElement(mesh, **features)
+    if z.class_family == "IfcWall":
+        return BuildingElement(mesh, thickening_voxel(z.thickness_model_mm, max(wall_mm, min_wall_mm), pitch_mm), **features)
+    if z.action == "verdicken":                      # Stützen, Träger u.ä.: bei Bedarf allseitig auf die Mindestwand aufdicken
         return BuildingElement(mesh, thickening_voxel(z.thickness_model_mm, min_wall_mm, pitch_mm), **features)
-    return BuildingElement(mesh, **features)         # «behalten» wie im IFC; Pakete sind schon auf ganze Voxel skaliert
+    return BuildingElement(mesh, **features)         # «behalten» wie im IFC
 
 
 def min_thickness(normal_vector: np.ndarray, min_wall: float, wall_mm: float) -> float:
